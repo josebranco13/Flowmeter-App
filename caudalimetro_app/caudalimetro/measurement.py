@@ -109,6 +109,7 @@ class MeasurementMixin:
             return
 
         if self.build_side_options() == ["Concluir sessão"]:
+            self.selected_index = 0
             self.show_summary()
         else:
             self.show_side_selection()

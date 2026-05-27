@@ -25,3 +25,4 @@ CSV_PATH = DATA_DIR / "medicoes.csv"
 
 DIAMETER_OPTIONS = [6, 8, 10, 12, 14, 16, 20, 25]
 MENU_OPTIONS = ["Medir caudal", "Enviar dados"]
+OPERATOR_OPTIONS = ["1001", "1002", "1003", "1004"]

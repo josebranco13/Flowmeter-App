@@ -9,6 +9,7 @@ from .config import (
     DATA_DIR,
     DIAMETER_OPTIONS,
     MENU_OPTIONS,
+    OPERATOR_OPTIONS,
     SENT_DIR,
     SESSIONS_DIR,
 )
@@ -34,16 +35,21 @@ class CaudalimetroApp(
         self.geometry(f"{APP_WIDTH}x{APP_HEIGHT}")
         self.minsize(APP_WIDTH, APP_HEIGHT)
         self.configure(bg=APP_BG)
+        self.maximize_window()
 
-        DATA_DIR.mkdir(exist_ok=True)
-        SESSIONS_DIR.mkdir(exist_ok=True)
-        SENT_DIR.mkdir(exist_ok=True)
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+        SENT_DIR.mkdir(parents=True, exist_ok=True)
 
         self.screen = ""
         self.operator_id = ""
         self.pin = ""
         self.active_field = 0
         self.selected_index = 0
+        self.operator_options = OPERATOR_OPTIONS.copy()
+        self.operator_list_open = False
+        self.operator_selected_index = 0
+        self.operator_visible_indices: list[int] = []
         self.input_value = ""
         self.login_active_field = 0
         self.circuit_active_field = 0
@@ -55,9 +61,18 @@ class CaudalimetroApp(
         self.current_side = ""
         self.current_circuit = 0
         self.samples: list[float] = []
+        self.option_labels: list[tk.Label] = []
+        self.diameter_labels: list[tk.Label] = []
+        self.field_value_labels: dict[str, tk.Label] = {}
         self.measure_labels: dict[str, tk.Label] = {}
         self.status_text = ""
 
         self.bind("<Key>", self.on_key)
         self.protocol("WM_DELETE_WINDOW", self.destroy)
         self.show_login()
+
+    def maximize_window(self) -> None:
+        try:
+            self.state("zoomed")
+        except tk.TclError:
+            self.attributes("-zoomed", True)

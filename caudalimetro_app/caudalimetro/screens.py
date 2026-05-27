@@ -8,6 +8,7 @@ from .config import BLUE, GREEN, GREY, PANEL_BG, PANEL_FG, WHITE
 class ScreensMixin:
     def show_login(self) -> None:
         self.screen = "LOGIN"
+        self.refresh_operator_options()
         panel = self.build_base("", "")
         tk.Label(
             panel,
@@ -15,16 +16,54 @@ class ScreensMixin:
             bg=PANEL_BG,
             fg=PANEL_FG,
             font=("Arial", 18, "bold"),
-        ).pack(pady=(42, 18))
-        self.field_row(panel, "Nº operador", self.operator_id, self.login_active_field == 0)
-        self.field_row(panel, "PIN", "●" * len(self.pin), self.login_active_field == 1)
+        ).pack(pady=(30, 16))
+        self.field_value_labels["operator_id"] = self.field_row(
+            panel,
+            "Nº operador",
+            self.operator_id,
+            self.login_active_field == 0,
+        )
+
+        if self.operator_list_open:
+            visible_options = self.visible_operator_options()
+            self.operator_visible_indices = [index for index, _ in visible_options]
+            for index, operator in visible_options:
+                self.option_row(
+                    panel,
+                    f"Operador {operator}",
+                    index == self.operator_selected_index,
+                )
+        else:
+            self.operator_visible_indices = []
+            self.field_value_labels["pin"] = self.field_row(
+                panel,
+                "PIN",
+                "●" * len(self.pin),
+                self.login_active_field == 1,
+            )
+
+        help_text = (
+            "Use ↑/↓ para escolher e prima Selecionar."
+            if self.operator_list_open
+            else "No campo do operador, prima Selecionar para abrir a lista."
+        )
         tk.Label(
             panel,
-            text="Use ↑/↓ para alternar entre campos.",
+            text=help_text,
             bg=PANEL_BG,
             fg="#555555",
             font=("Arial", 11),
-        ).pack(pady=20)
+        ).pack(pady=16)
+
+    def visible_operator_options(self) -> list[tuple[int, str]]:
+        max_visible = 4
+        if len(self.operator_options) <= max_visible:
+            return list(enumerate(self.operator_options))
+
+        start = self.operator_selected_index - 1
+        start = max(0, min(start, len(self.operator_options) - max_visible))
+        end = start + max_visible
+        return list(enumerate(self.operator_options[start:end], start=start))
 
     def show_menu(self) -> None:
         self.screen = "MENU"
@@ -50,7 +89,12 @@ class ScreensMixin:
             fg=PANEL_FG,
             font=("Arial", 18, "bold"),
         ).pack(pady=(46, 24))
-        self.field_row(panel, "Molde", self.input_value, True)
+        self.field_value_labels["input_value"] = self.field_row(
+            panel,
+            "Molde",
+            self.input_value,
+            True,
+        )
         tk.Label(
             panel,
             text="Pode introduzir números pelo teclado físico.",
@@ -72,18 +116,18 @@ class ScreensMixin:
 
         grid = tk.Frame(panel, bg=PANEL_BG)
         grid.pack(pady=4)
+        self.diameter_labels = []
         for i, diameter in enumerate(self.diameter_options):
             active = i == self.selected_index
             label = tk.Label(
                 grid,
                 text=f"{diameter} mm",
-                bg=BLUE if active else GREY,
-                fg=WHITE if active else PANEL_FG,
-                font=("Arial", 16, "bold" if active else "normal"),
                 width=10,
                 pady=14,
             )
+            self.style_diameter_label(label, active)
             label.grid(row=i // 4, column=i % 4, padx=7, pady=7)
+            self.diameter_labels.append(label)
 
         tk.Label(
             panel,
@@ -96,6 +140,7 @@ class ScreensMixin:
     def show_pressure(self) -> None:
         self.screen = "PRESSURE"
         panel = self.build_base("Pressão à entrada", "5/8")
+        pressure_value = f"{self.input_value} bar" if self.input_value else ""
         tk.Label(
             panel,
             text="Indique a pressão de entrada",
@@ -103,7 +148,12 @@ class ScreensMixin:
             fg=PANEL_FG,
             font=("Arial", 18, "bold"),
         ).pack(pady=(46, 24))
-        self.field_row(panel, "Pressão", f"{self.input_value} bar", True)
+        self.field_value_labels["input_value"] = self.field_row(
+            panel,
+            "Pressão",
+            pressure_value,
+            True,
+        )
         tk.Label(
             panel,
             text="Exemplo: 2.5 bar",
@@ -122,13 +172,13 @@ class ScreensMixin:
             fg=PANEL_FG,
             font=("Arial", 18, "bold"),
         ).pack(pady=(38, 22))
-        self.field_row(
+        self.field_value_labels["circuit_A"] = self.field_row(
             panel,
             "Lado A",
             self.circuit_inputs["A"],
             self.circuit_active_field == 0,
         )
-        self.field_row(
+        self.field_value_labels["circuit_B"] = self.field_row(
             panel,
             "Lado B",
             self.circuit_inputs["B"],
@@ -146,6 +196,7 @@ class ScreensMixin:
         self.screen = "SIDE"
         self.side_options = self.build_side_options()
         if not self.side_options:
+            self.selected_index = 0
             self.show_summary()
             return
         self.selected_index = min(self.selected_index, len(self.side_options) - 1)

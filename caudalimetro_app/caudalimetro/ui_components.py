@@ -24,6 +24,9 @@ class UiComponentsMixin:
 
     def build_base(self, title: str, step: str) -> tk.Frame:
         self.clear()
+        self.option_labels = []
+        self.diameter_labels = []
+        self.field_value_labels = {}
         root = tk.Frame(self, bg=APP_BG)
         root.pack(fill="both", expand=True)
 
@@ -112,7 +115,6 @@ class UiComponentsMixin:
 
         buttons = [
             ("Voltar", BLACK, self.go_back),
-            ("Apagar tudo", "#5d646d", self.delete_all),
             ("Apagar", RED, self.delete_one),
             ("Selecionar", GREEN, self.select),
             ("Confirmar", BLUE, self.confirm),
@@ -132,13 +134,13 @@ class UiComponentsMixin:
                 pady=10,
             ).pack(side="left", expand=True, fill="x", padx=3)
 
-    def field_row(self, parent: tk.Widget, label: str, value: str, active: bool) -> None:
+    def field_row(self, parent: tk.Widget, label: str, value: str, active: bool) -> tk.Label:
         row = tk.Frame(parent, bg=PANEL_BG)
         row.pack(fill="x", padx=60, pady=10)
         tk.Label(row, text=label, bg=PANEL_BG, fg=PANEL_FG, font=("Arial", 14)).pack(
             side="left"
         )
-        tk.Label(
+        value_label = tk.Label(
             row,
             text=value or " ",
             bg="#bcd8ff" if active else GREY,
@@ -147,16 +149,91 @@ class UiComponentsMixin:
             anchor="w",
             width=18,
             padx=8,
-        ).pack(side="right")
+        )
+        value_label.pack(side="right")
+        return value_label
 
-    def option_row(self, parent: tk.Widget, text: str, active: bool) -> None:
-        tk.Label(
-            parent,
-            text=text,
+    def update_field_value(self, key: str, value: str) -> bool:
+        label = self.field_value_labels.get(key)
+        if label is None:
+            return False
+
+        try:
+            label.configure(text=value or " ")
+        except tk.TclError:
+            return False
+        return True
+
+    def style_option_label(self, label: tk.Label, active: bool) -> None:
+        label.configure(
             bg=BLUE if active else GREY,
             fg=WHITE if active else PANEL_FG,
-            font=("Arial", 17, "bold" if active else "normal"),
+            font=("Arial", 17, "bold"),
+        )
+
+    def style_diameter_label(self, label: tk.Label, active: bool) -> None:
+        label.configure(
+            bg=BLUE if active else GREY,
+            fg=WHITE if active else PANEL_FG,
+            font=("Arial", 16, "bold"),
+        )
+
+    def update_option_selection(self) -> bool:
+        if not self.option_labels:
+            return False
+
+        try:
+            for index, label in enumerate(self.option_labels):
+                self.style_option_label(label, index == self.selected_index)
+        except tk.TclError:
+            return False
+        return True
+
+    def update_diameter_selection(self) -> bool:
+        if len(self.diameter_labels) != len(self.diameter_options):
+            return False
+
+        try:
+            for index, label in enumerate(self.diameter_labels):
+                self.style_diameter_label(label, index == self.selected_index)
+        except tk.TclError:
+            return False
+        return True
+
+    def update_operator_selection(self) -> bool:
+        if len(self.option_labels) != len(self.operator_visible_indices):
+            return False
+
+        try:
+            for label, index in zip(self.option_labels, self.operator_visible_indices):
+                self.style_option_label(label, index == self.operator_selected_index)
+        except tk.TclError:
+            return False
+        return True
+
+    def update_operator_options(self, visible_options: list[tuple[int, str]]) -> bool:
+        if len(self.option_labels) != len(visible_options):
+            return False
+
+        try:
+            self.operator_visible_indices = []
+            for label, (index, operator) in zip(self.option_labels, visible_options):
+                self.operator_visible_indices.append(index)
+                label.configure(text=f"Operador {operator}")
+                self.style_option_label(label, index == self.operator_selected_index)
+        except tk.TclError:
+            return False
+        return True
+
+    def option_row(self, parent: tk.Widget, text: str, active: bool) -> tk.Label:
+        label = tk.Label(
+            parent,
+            text=text,
             pady=12,
             padx=10,
             anchor="w",
-        ).pack(fill="x", padx=60, pady=6)
+        )
+        self.style_option_label(label, active)
+        label.pack(fill="x", padx=60, pady=6)
+        self.option_labels.append(label)
+        return label
