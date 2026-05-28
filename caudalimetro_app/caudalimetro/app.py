@@ -56,11 +56,24 @@ class CaudalimetroApp(
         self.circuit_inputs = {"A": "", "B": ""}
         self.diameter_options = DIAMETER_OPTIONS.copy()
         self.menu_options = MENU_OPTIONS.copy()
+        self.selected_menu_option = ""
+        self.mold_side_options = [
+            "Fixed plate",
+            "Moving Plate",
+            "Middle Plate",
+            "Jiggle",
+            "Cam Slide",
+        ]
+        self.selected_mold_side_index = 0
+        self.mold_side_dropdown_open = False
         self.side_options: list[str] = []
         self.session: MeasurementSession | None = None
         self.current_side = ""
         self.current_circuit = 0
         self.samples: list[float] = []
+        self.measurement_running = False
+        self.last_measurement_record: dict[str, object] | None = None
+        self.selected_result_index = 0
         self.option_labels: list[tk.Label] = []
         self.diameter_labels: list[tk.Label] = []
         self.field_value_labels: dict[str, tk.Label] = {}

@@ -1,0 +1,16 @@
+{
+  "session_id": "20260528_141726_147889",
+  "operador": "1001",
+  "molde": "20000",
+  "diametro_mm": 14,
+  "pressao_entrada_bar": 7.0,
+  "circuitos_por_lado": {
+    "A": 2,
+    "B": 1
+  },
+  "estado": "em_medicao",
+  "criado_em": "2026-05-28T14:17:26",
+  "atualizado_em": "2026-05-28T14:17:46",
+  "enviado_em": null,
+  "medicoes": []
+}

@@ -5,6 +5,7 @@ import json
 import shutil
 from dataclasses import asdict
 from datetime import datetime
+from typing import Any
 from uuid import uuid4
 
 from .config import CSV_PATH, SENT_DIR, SESSIONS_DIR
@@ -25,8 +26,14 @@ class PersistenceMixin:
         self.current_side = ""
         self.current_circuit = 0
         self.samples = []
+        self.measurement_running = False
+        self.last_measurement_record = None
+        self.selected_result_index = 0
         self.circuit_active_field = 0
         self.operator_list_open = False
+        self.selected_menu_option = ""
+        self.selected_mold_side_index = 0
+        self.mold_side_dropdown_open = False
         self.selected_index = 0
         self.status_text = ""
 
@@ -105,7 +112,9 @@ class PersistenceMixin:
             try:
                 with path.open("r", encoding="utf-8") as f:
                     data = json.load(f)
-            except json.JSONDecodeError:
+            except (OSError, json.JSONDecodeError):
+                continue
+            if not isinstance(data, dict):
                 continue
             if data.get("enviado_em"):
                 continue
@@ -117,15 +126,32 @@ class PersistenceMixin:
             sent_count += 1
         return sent_count
 
-    def pending_sessions_count(self) -> int:
+    def load_pending_sessions(self) -> list[dict[str, Any]]:
         SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
-        count = 0
+        sessions: list[dict[str, Any]] = []
         for path in SESSIONS_DIR.glob("*.json"):
             try:
                 with path.open("r", encoding="utf-8") as f:
                     data = json.load(f)
-                if not data.get("enviado_em"):
-                    count += 1
-            except json.JSONDecodeError:
+            except (OSError, json.JSONDecodeError):
                 continue
-        return count
+
+            if not isinstance(data, dict):
+                continue
+
+            if data.get("enviado_em"):
+                continue
+
+            data["_file_name"] = path.name
+            sessions.append(data)
+
+        return sorted(
+            sessions,
+            key=lambda item: str(
+                item.get("atualizado_em") or item.get("criado_em") or item.get("session_id") or ""
+            ),
+            reverse=True,
+        )
+
+    def pending_sessions_count(self) -> int:
+        return len(self.load_pending_sessions())
