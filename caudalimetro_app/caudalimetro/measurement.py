@@ -144,6 +144,24 @@ class MeasurementMixin:
 
         self.samples = []
         self.status_text = ""
+        self.selected_index = 0
+        self.show_measurement_result()
+
+    def highlight_current_measurement(self) -> None:
+        if self.session is None or self.last_measurement_record is None:
+            return
+
+        for item in self.session.medicoes:
+            if (
+                item.get("lado") == self.current_side
+                and item.get("circuito") == self.current_circuit
+            ):
+                item["destacado"] = True
+                self.last_measurement_record = item
+                break
+
+        self.selected_index = 1
+        self.save_session()
         self.show_measurement_result()
 
     def advance_after_measurement_result(self) -> None:

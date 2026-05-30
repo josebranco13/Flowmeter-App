@@ -79,12 +79,18 @@ class KeyboardMixin:
             if not self.update_diameter_selection():
                 self.show_diameter()
         elif self.screen == "MOLD_SIDE":
-            if self.mold_side_options:
+            if self.mold_side_dropdown_open and self.mold_side_options:
                 self.mold_side_dropdown_open = True
                 self.selected_mold_side_index = (
                     self.selected_mold_side_index + delta
                 ) % len(self.mold_side_options)
-                self.show_mold_side()
+            else:
+                self.mold_side_dropdown_open = False
+                self.selected_index = (self.selected_index + delta) % 2
+            self.show_mold_side()
+        elif self.screen == "MEASUREMENT_RESULT":
+            self.selected_index = (self.selected_index + delta) % 2
+            self.show_measurement_result()
         elif self.screen == "CIRCUIT_RESULTS":
             records = self.measurements_for_side(self.current_side)
             if records:
@@ -208,6 +214,9 @@ class KeyboardMixin:
             return
 
         if self.screen == "MOLD_SIDE":
+            if self.selected_index == 1 and not self.mold_side_dropdown_open:
+                self.change_operator_from_mold_side()
+                return
             self.select_mold_side()
             return
 
@@ -219,11 +228,16 @@ class KeyboardMixin:
             self.stop_current_measurement()
             return
 
-        if self.screen in ("MEASUREMENT_RESULT", "CIRCUIT_RESULTS"):
+        if self.screen == "MEASUREMENT_RESULT":
+            if self.selected_index == 1:
+                self.highlight_current_measurement()
+            return
+
+        if self.screen == "CIRCUIT_RESULTS":
             return
 
         if self.screen == "SIDE_COMPLETE":
-            self.save_session()
+            self.save_session_and_return_to_login()
             return
 
         if self.screen == "SEND_REVIEW":
@@ -308,6 +322,9 @@ class KeyboardMixin:
             self.show_mold_side()
 
         elif self.screen == "MOLD_SIDE":
+            if self.selected_index == 1 and not self.mold_side_dropdown_open:
+                self.change_operator_from_mold_side()
+                return
             assert self.session is not None
             if not self.session.lado_molde:
                 self.status_text = "Selecione o lado do molde."

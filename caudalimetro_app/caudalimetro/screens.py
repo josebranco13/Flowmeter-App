@@ -271,6 +271,8 @@ class ScreensMixin:
 
     def show_mold_side(self) -> None:
         self.screen = "MOLD_SIDE"
+        if self.selected_index not in (0, 1):
+            self.selected_index = 0
         self.clear()
         self.option_labels = []
         self.diameter_labels = []
@@ -297,13 +299,14 @@ class ScreensMixin:
         ).grid(row=0, column=0, sticky="e", padx=(0, 8), pady=5)
 
         side_value = self.session.lado_molde if self.session else ""
+        side_active = self.selected_index == 0
         side_field = tk.Frame(
             form,
             bg=GREY,
             width=230,
             height=36,
-            highlightbackground="#087cff",
-            highlightcolor="#087cff",
+            highlightbackground="#087cff" if side_active else WHITE,
+            highlightcolor="#087cff" if side_active else WHITE,
             highlightthickness=3,
         )
         side_field.grid(row=0, column=1, sticky="w", pady=5)
@@ -354,8 +357,16 @@ class ScreensMixin:
             pady=4,
         ).grid(row=2, column=1, sticky="w", pady=(14, 5))
 
-        tk.Button(
+        operator_active = self.selected_index == 1
+        operator_action = tk.Frame(
             form,
+            bg="#087cff" if operator_active else WHITE,
+            padx=3,
+            pady=3,
+        )
+        operator_action.grid(row=3, column=0, columnspan=2, pady=(12, 0))
+        tk.Button(
+            operator_action,
             text="Trocar\nOperador",
             command=self.change_operator_from_mold_side,
             bg="#1f1f1f",
@@ -369,7 +380,7 @@ class ScreensMixin:
             font=("Arial", 13),
             width=14,
             pady=8,
-        ).grid(row=3, column=0, columnspan=2, pady=(12, 0))
+        ).pack()
 
         if self.status_text:
             tk.Label(
@@ -450,6 +461,7 @@ class ScreensMixin:
             self.session.lado_molde = ""
         self.mold_side_dropdown_open = False
         self.selected_mold_side_index = 0
+        self.selected_index = 0
         self.status_text = ""
         self.show_mold_side()
 
@@ -916,10 +928,14 @@ class ScreensMixin:
         self.result_box(form, 1, 1, 120, str(self.current_circuit), font_size=16)
 
         flow_value = ""
+        flow_highlighted = False
         if self.last_measurement_record:
             flow_value = self.format_flow_display(
                 self.last_measurement_record.get("caudal_medio_l_min")
             )
+            flow_highlighted = bool(self.last_measurement_record.get("destacado"))
+        flow_active = self.selected_index == 0
+        flow_bg = RED if flow_highlighted else GREY
         tk.Label(
             form,
             text="caudal:",
@@ -929,11 +945,11 @@ class ScreensMixin:
         ).grid(row=2, column=0, sticky="e", pady=3)
         box = tk.Frame(
             form,
-            bg=GREY,
+            bg=flow_bg,
             width=120,
             height=30,
-            highlightbackground="#087cff",
-            highlightcolor="#087cff",
+            highlightbackground="#087cff" if flow_active else WHITE,
+            highlightcolor="#087cff" if flow_active else WHITE,
             highlightthickness=2,
         )
         box.grid(row=2, column=1, sticky="w", padx=(8, 4), pady=3)
@@ -941,7 +957,7 @@ class ScreensMixin:
         tk.Label(
             box,
             text=flow_value,
-            bg=GREY,
+            bg=flow_bg,
             fg="#777777",
             font=("Arial", 15),
         ).pack(fill="both", expand=True)
@@ -953,10 +969,18 @@ class ScreensMixin:
             font=("Arial", 15),
         ).grid(row=2, column=2, sticky="w", pady=3)
 
-        tk.Button(
+        highlight_active = self.selected_index == 1
+        highlight_action = tk.Frame(
             form,
+            bg="#087cff" if highlight_active else WHITE,
+            padx=3,
+            pady=3,
+        )
+        highlight_action.grid(row=3, column=0, columnspan=3, pady=(12, 0))
+        tk.Button(
+            highlight_action,
             text="Destacar",
-            command=self.no_action,
+            command=self.highlight_current_measurement,
             bg="#ff1010",
             fg=PANEL_FG,
             activebackground="#ff1010",
@@ -968,19 +992,28 @@ class ScreensMixin:
             font=("Arial", 11),
             padx=30,
             pady=8,
-        ).grid(row=3, column=0, columnspan=3, pady=(12, 0))
+        ).pack()
 
         next_text = (
             "Proximo\nCircuito"
             if self.measured_count_for_side(self.current_side) < self.expected_count_for_current_side()
             else "Seguinte"
         )
+        footer_area = tk.Frame(root, bg=WHITE)
+        footer_area.pack(side="bottom", fill="x")
+        tk.Label(
+            footer_area,
+            text="Limpar circuito anterior",
+            bg=WHITE,
+            fg=RED,
+            font=("Arial", 13, "bold"),
+        ).pack(fill="x", pady=(0, 4))
         self.build_simple_footer(
-            root,
+            footer_area,
             [
                 ("Voltar atrás", "#303030", WHITE, self.go_back),
                 ("Medir\nNovamente", RED, PANEL_FG, self.remeasure_current_circuit),
-                ("Selecionar", GREEN, PANEL_FG, self.no_action),
+                ("Selecionar", GREEN, PANEL_FG, self.select),
                 (next_text, BLUE, PANEL_FG, self.advance_after_measurement_result),
             ],
             font_size=10,
@@ -1047,9 +1080,8 @@ class ScreensMixin:
                 fg=PANEL_FG,
                 font=("Arial", 20),
             ).grid(row=index, column=0, sticky="e", pady=3)
-            bg = "#7ddde2" if index == self.selected_result_index else GREY
-            if index == 1:
-                bg = "#ff7d83"
+            highlighted = bool(item.get("destacado"))
+            bg = RED if highlighted or index == self.selected_result_index else GREY
             self.result_box(rows, index, 1, 184, value, font_size=18).configure(bg=bg)
             rows.grid_slaves(row=index, column=1)[0].configure(bg=bg)
             tk.Label(
@@ -1143,11 +1175,18 @@ class ScreensMixin:
             [
                 ("Voltar atrás", "#303030", WHITE, self.go_back),
                 ("Apagar", RED, PANEL_FG, self.no_action),
-                ("Guardar\nDados", GREEN, PANEL_FG, self.save_session),
+                ("Guardar\nDados", GREEN, PANEL_FG, self.save_session_and_return_to_login),
                 ("Medir\nPróximo Lado", BLUE, PANEL_FG, self.measure_next_side),
             ],
             font_size=15,
         )
+
+    def save_session_and_return_to_login(self) -> None:
+        if self.session is not None:
+            self.session.estado = "concluida"
+            self.save_session()
+        self.logout()
+        self.show_login()
 
     def measure_next_side(self) -> None:
         if self.session is not None:
@@ -1155,6 +1194,7 @@ class ScreensMixin:
         self.current_side = ""
         self.current_circuit = 0
         self.input_value = ""
+        self.selected_index = 0
         self.selected_mold_side_index = 0
         self.mold_side_dropdown_open = False
         self.status_text = ""

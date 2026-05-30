@@ -1,0 +1,45 @@
+{
+  "session_id": "20260530_151007_e778a9",
+  "operador": "1001",
+  "molde": "AHA12345",
+  "lado_molde": "Fixed plate",
+  "diametro_mm": 10,
+  "pressao_entrada_bar": 5.0,
+  "circuitos_por_lado": {
+    "Fixed plate": 2
+  },
+  "estado": "enviado",
+  "criado_em": "2026-05-30T15:10:07",
+  "atualizado_em": "2026-05-30T15:10:39",
+  "enviado_em": "2026-05-30T15:10:47",
+  "medicoes": [
+    {
+      "session_id": "20260530_151007_e778a9",
+      "operador": "1001",
+      "molde": "AHA12345",
+      "diametro_mm": 10,
+      "pressao_entrada_bar": 5.0,
+      "lado": "Fixed plate",
+      "circuito": 1,
+      "caudal_min_l_min": 7.3,
+      "caudal_medio_l_min": 7.88,
+      "caudal_max_l_min": 8.47,
+      "amostras": 2,
+      "medido_em": "2026-05-30T15:10:20"
+    },
+    {
+      "session_id": "20260530_151007_e778a9",
+      "operador": "1001",
+      "molde": "AHA12345",
+      "diametro_mm": 10,
+      "pressao_entrada_bar": 5.0,
+      "lado": "Fixed plate",
+      "circuito": 2,
+      "caudal_min_l_min": 7.68,
+      "caudal_medio_l_min": 7.88,
+      "caudal_max_l_min": 8.08,
+      "amostras": 2,
+      "medido_em": "2026-05-30T15:10:29"
+    }
+  ]
+}
