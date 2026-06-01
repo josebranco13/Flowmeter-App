@@ -1028,14 +1028,26 @@ class ScreensMixin:
         width: int,
         text: str,
         font_size: int = 13,
+        bg: str = GREY,
+        highlight_bg: str | None = None,
+        highlight_thickness: int = 0,
     ) -> tk.Label:
-        box = tk.Frame(parent, bg=GREY, width=width, height=34)
+        highlight_bg = highlight_bg or bg
+        box = tk.Frame(
+            parent,
+            bg=bg,
+            width=width,
+            height=34,
+            highlightbackground=highlight_bg,
+            highlightcolor=highlight_bg,
+            highlightthickness=highlight_thickness,
+        )
         box.grid(row=row, column=column, sticky="w", padx=(8, 4), pady=3)
         box.pack_propagate(False)
         label = tk.Label(
             box,
             text=text,
-            bg=GREY,
+            bg=bg,
             fg=PANEL_FG,
             font=("Arial", font_size),
             anchor="center",
@@ -1072,7 +1084,12 @@ class ScreensMixin:
         rows.grid(row=1, column=0, sticky="nw", padx=96)
         for index, item in enumerate(records[:6]):
             circuit = item.get("circuito", index + 1)
-            value = self.format_flow_display(item.get("caudal_medio_l_min"))
+            editing = self.result_editing and index == self.selected_result_index
+            value = (
+                self.result_edit_display_value()
+                if editing
+                else self.format_flow_display(item.get("caudal_medio_l_min"))
+            )
             tk.Label(
                 rows,
                 text=f"circuito {circuit}",
@@ -1081,9 +1098,21 @@ class ScreensMixin:
                 font=("Arial", 20),
             ).grid(row=index, column=0, sticky="e", pady=3)
             highlighted = bool(item.get("destacado"))
-            bg = RED if highlighted or index == self.selected_result_index else GREY
-            self.result_box(rows, index, 1, 184, value, font_size=18).configure(bg=bg)
-            rows.grid_slaves(row=index, column=1)[0].configure(bg=bg)
+            selected = index == self.selected_result_index
+            bg = RED if highlighted else GREY
+            value_label = self.result_box(
+                rows,
+                index,
+                1,
+                184,
+                value,
+                font_size=18,
+                bg=bg,
+                highlight_bg="#087cff" if selected else bg,
+                highlight_thickness=2 if selected else 0,
+            )
+            if selected:
+                self.field_value_labels["selected_result_value"] = value_label
             tk.Label(
                 rows,
                 text="L/min",
@@ -1098,13 +1127,27 @@ class ScreensMixin:
             scroll.pack_propagate(False)
             tk.Frame(scroll, bg="#555555", width=10, height=150).pack(pady=10)
 
+        if self.status_text:
+            tk.Label(
+                content,
+                text=self.status_text,
+                bg=WHITE,
+                fg=RED,
+                font=("Arial", 13, "bold"),
+            ).grid(row=2, column=0, sticky="w", padx=96, pady=(12, 0))
+
         self.build_simple_footer(
             root,
             [
                 ("Voltar atrás", "#303030", WHITE, self.go_back),
                 ("Medir\nNovamente", RED, PANEL_FG, self.remeasure_selected_result),
-                ("Editar", GREEN, PANEL_FG, self.no_action),
-                ("Confirmar", BLUE, PANEL_FG, self.show_side_complete),
+                (
+                    "Guardar" if self.result_editing else "Editar",
+                    GREEN,
+                    PANEL_FG,
+                    self.save_selected_result_edit if self.result_editing else self.edit_selected_result,
+                ),
+                ("Confirmar", BLUE, PANEL_FG, self.confirm),
             ],
             font_size=14,
         )
@@ -1176,7 +1219,7 @@ class ScreensMixin:
                 ("Voltar atrás", "#303030", WHITE, self.go_back),
                 ("Apagar", RED, PANEL_FG, self.no_action),
                 ("Guardar\nDados", GREEN, PANEL_FG, self.save_session_and_return_to_login),
-                ("Medir\nPróximo Lado", BLUE, PANEL_FG, self.measure_next_side),
+                ("Confirmar", BLUE, PANEL_FG, self.save_session_and_return_to_login),
             ],
             font_size=15,
         )

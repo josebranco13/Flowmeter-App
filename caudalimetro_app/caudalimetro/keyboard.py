@@ -92,6 +92,8 @@ class KeyboardMixin:
             self.selected_index = (self.selected_index + delta) % 2
             self.show_measurement_result()
         elif self.screen == "CIRCUIT_RESULTS":
+            if self.result_editing:
+                return
             records = self.measurements_for_side(self.current_side)
             if records:
                 self.selected_result_index = (
@@ -151,6 +153,11 @@ class KeyboardMixin:
             self.input_value = (self.input_value + char)[:3]
             if not self.update_field_value("input_value", self.input_value):
                 self.show_circuits()
+        elif self.screen == "CIRCUIT_RESULTS" and self.result_editing:
+            if char == "." and "." in self.input_value:
+                return
+            self.input_value = (self.input_value + char)[:8]
+            self.refresh_result_edit_display()
 
     def delete_one(self) -> None:
         if self.screen == "LOGIN":
@@ -174,7 +181,11 @@ class KeyboardMixin:
         elif self.screen == "MEASUREMENT_RESULT":
             self.remeasure_current_circuit()
         elif self.screen == "CIRCUIT_RESULTS":
-            self.remeasure_selected_result()
+            if self.result_editing:
+                self.input_value = self.input_value[:-1]
+                self.refresh_result_edit_display()
+            else:
+                self.remeasure_selected_result()
         elif self.screen == "CIRCUITS":
             self.input_value = self.input_value[:-1]
             if not self.update_field_value("input_value", self.input_value):
@@ -202,7 +213,11 @@ class KeyboardMixin:
         elif self.screen == "MEASUREMENT_RESULT":
             self.remeasure_current_circuit()
         elif self.screen == "CIRCUIT_RESULTS":
-            self.remeasure_selected_result()
+            if self.result_editing:
+                self.input_value = ""
+                self.refresh_result_edit_display()
+            else:
+                self.remeasure_selected_result()
         elif self.screen == "CIRCUITS":
             self.input_value = ""
             if not self.update_field_value("input_value", ""):
@@ -234,6 +249,10 @@ class KeyboardMixin:
             return
 
         if self.screen == "CIRCUIT_RESULTS":
+            if self.result_editing:
+                self.save_selected_result_edit()
+            else:
+                self.edit_selected_result()
             return
 
         if self.screen == "SIDE_COMPLETE":
@@ -388,10 +407,12 @@ class KeyboardMixin:
             self.advance_after_measurement_result()
 
         elif self.screen == "CIRCUIT_RESULTS":
+            if self.result_editing and not self.save_selected_result_edit():
+                return
             self.show_side_complete()
 
         elif self.screen == "SIDE_COMPLETE":
-            self.measure_next_side()
+            self.save_session_and_return_to_login()
 
         elif self.screen == "SUMMARY":
             if self.selected_index == 0:
@@ -431,7 +452,7 @@ class KeyboardMixin:
                 self.show_login()
             return
         if self.screen == "MENU":
-            self.show_login()
+            return
         elif self.screen == "MOLD":
             self.show_menu()
         elif self.screen == "MOLD_SIDE":
@@ -463,7 +484,13 @@ class KeyboardMixin:
         elif self.screen == "MEASUREMENT_RESULT":
             self.show_circuit_start()
         elif self.screen == "CIRCUIT_RESULTS":
-            self.show_measurement_result()
+            if self.result_editing:
+                self.result_editing = False
+                self.input_value = ""
+                self.status_text = ""
+                self.show_circuit_results()
+            else:
+                self.show_measurement_result()
         elif self.screen == "SIDE_COMPLETE":
             self.show_circuit_results()
         elif self.screen == "SEND_REVIEW":

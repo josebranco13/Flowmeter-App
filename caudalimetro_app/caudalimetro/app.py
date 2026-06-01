@@ -74,6 +74,7 @@ class CaudalimetroApp(
         self.measurement_running = False
         self.last_measurement_record: dict[str, object] | None = None
         self.selected_result_index = 0
+        self.result_editing = False
         self.option_labels: list[tk.Label] = []
         self.diameter_labels: list[tk.Label] = []
         self.field_value_labels: dict[str, tk.Label] = {}

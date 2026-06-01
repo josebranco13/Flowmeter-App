@@ -29,6 +29,7 @@ class PersistenceMixin:
         self.measurement_running = False
         self.last_measurement_record = None
         self.selected_result_index = 0
+        self.result_editing = False
         self.circuit_active_field = 0
         self.operator_list_open = False
         self.selected_menu_option = ""

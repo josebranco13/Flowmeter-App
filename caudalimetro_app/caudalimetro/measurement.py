@@ -173,7 +173,76 @@ class MeasurementMixin:
             return
 
         self.selected_result_index = 0
+        self.result_editing = False
+        self.input_value = ""
         self.show_circuit_results()
+
+    def selected_result_record(self) -> dict[str, object] | None:
+        if self.session is None or not self.current_side:
+            return None
+
+        records = sorted(self.measurements_for_side(self.current_side), key=lambda item: item["circuito"])
+        if not records:
+            return None
+
+        self.selected_result_index = min(self.selected_result_index, len(records) - 1)
+        return records[self.selected_result_index]
+
+    def result_edit_display_value(self) -> str:
+        return self.input_value.replace(".", ",")
+
+    def refresh_result_edit_display(self) -> None:
+        if not self.update_field_value("selected_result_value", self.result_edit_display_value()):
+            self.show_circuit_results()
+
+    def edit_selected_result(self) -> None:
+        if self.selected_result_record() is None:
+            return
+
+        self.result_editing = True
+        self.input_value = ""
+        self.status_text = ""
+        self.show_circuit_results()
+        self.focus_set()
+
+    def save_selected_result_edit(self) -> bool:
+        if not self.result_editing:
+            return True
+
+        text = self.input_value.strip().replace(",", ".")
+        try:
+            value = float(text)
+        except ValueError:
+            self.status_text = "Indique um valor de caudal valido."
+            self.show_circuit_results()
+            self.focus_set()
+            return False
+
+        if value < 0:
+            self.status_text = "O caudal nao pode ser negativo."
+            self.show_circuit_results()
+            self.focus_set()
+            return False
+
+        record = self.selected_result_record()
+        if record is None:
+            return False
+
+        value = round(value, 2)
+        record["caudal_medio_l_min"] = value
+        if (
+            self.last_measurement_record is not None
+            and self.last_measurement_record.get("lado") == record.get("lado")
+            and self.last_measurement_record.get("circuito") == record.get("circuito")
+        ):
+            self.last_measurement_record = record
+
+        self.result_editing = False
+        self.input_value = ""
+        self.status_text = ""
+        self.save_session()
+        self.show_circuit_results()
+        return True
 
     def remeasure_current_circuit(self) -> None:
         if self.session is None or not self.current_side or not self.current_circuit:
@@ -189,6 +258,8 @@ class MeasurementMixin:
     def remeasure_selected_result(self) -> None:
         if self.session is None or not self.current_side:
             return
+        self.result_editing = False
+        self.input_value = ""
         records = sorted(self.measurements_for_side(self.current_side), key=lambda item: item["circuito"])
         if not records:
             return
