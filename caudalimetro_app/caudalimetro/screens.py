@@ -511,13 +511,45 @@ class ScreensMixin:
         count = self.expected_count_for_current_side()
         return f"{count}circuitos" if count else ""
 
-    def measurement_badge_text(self) -> str:
+    def pressure_badge_text(self) -> str:
+        if self.session is None or not self.session.pressao_entrada_bar:
+            return ""
+        value = f"{float(self.session.pressao_entrada_bar):g}".replace(".", ",")
+        return f"{value} bar"
+
+    def setup_badge_text(
+        self,
+        include_circuit_count: bool = False,
+        include_pressure: bool = False,
+    ) -> str:
         lines = [self.diameter_badge_text()]
-        if self.session is not None and self.session.lado_molde:
-            lines.append(self.session.lado_molde)
-        count_text = self.circuit_count_badge_text()
-        if count_text:
-            lines.append(count_text)
+        if self.session is not None:
+            if self.session.lado_molde:
+                lines.append(self.session.lado_molde)
+            if self.session.molde:
+                lines.append(f"Molde {self.session.molde}")
+        if include_circuit_count:
+            lines.append(self.circuit_count_badge_text())
+        if include_pressure:
+            lines.append(self.pressure_badge_text())
+        return "\n".join(line for line in lines if line)
+
+    def diameter_context_badge_text(self) -> str:
+        return self.setup_badge_text()
+
+    def circuit_progress_title(self) -> str:
+        total = self.expected_count_for_current_side()
+        if self.current_circuit and total:
+            return f"Medir circuitos ({self.current_circuit}/{total})"
+        return "Medir circuitos"
+
+    def measurement_badge_text(self) -> str:
+        return self.setup_badge_text(include_circuit_count=True, include_pressure=True)
+
+    def active_measurement_badge_text(self) -> str:
+        lines = [self.measurement_badge_text()]
+        if self.current_circuit:
+            lines.append(f"circuito {self.current_circuit}")
         return "\n".join(line for line in lines if line)
 
     @staticmethod
@@ -577,8 +609,9 @@ class ScreensMixin:
             font=("Arial", 11),
         ).pack(pady=12)
 
-        if self.session is not None and self.session.lado_molde:
-            self.place_orange_badge(self, self.session.lado_molde)
+        badge_text = self.diameter_context_badge_text()
+        if badge_text:
+            self.place_orange_badge(self, badge_text, font_size=13, padx=12)
 
     def show_pressure(self) -> None:
         self.screen = "PRESSURE"
@@ -646,7 +679,12 @@ class ScreensMixin:
                 ("Confirmar", BLUE, PANEL_FG, self.confirm),
             ],
         )
-        self.place_orange_badge(root, self.circuit_count_badge_text(), font_size=13, padx=10)
+        self.place_orange_badge(
+            root,
+            self.setup_badge_text(include_circuit_count=True),
+            font_size=11,
+            padx=14,
+        )
 
     def show_circuits(self) -> None:
         self.screen = "CIRCUITS"
@@ -706,7 +744,7 @@ class ScreensMixin:
                 ("Confirmar", BLUE, PANEL_FG, self.confirm),
             ],
         )
-        self.place_orange_badge(root, self.diameter_badge_text(), font_size=12, padx=24)
+        self.place_orange_badge(root, self.setup_badge_text(), font_size=12, padx=18)
 
     def show_side_selection(self) -> None:
         self.screen = "SIDE"
@@ -798,7 +836,12 @@ class ScreensMixin:
             ],
             font_size=10,
         )
-        self.place_orange_badge(root, f"circuito {self.current_circuit}", font_size=12, padx=18)
+        self.place_orange_badge(
+            root,
+            self.active_measurement_badge_text(),
+            font_size=10,
+            padx=18,
+        )
 
         self.after(250, self.update_measurement_values)
 
@@ -843,7 +886,7 @@ class ScreensMixin:
         form.grid(row=0, column=0, sticky="w", padx=4, pady=(8, 0))
         tk.Label(
             form,
-            text="Medir circuitos",
+            text=self.circuit_progress_title(),
             bg=WHITE,
             fg=PANEL_FG,
             font=("Arial", 12),
@@ -913,7 +956,7 @@ class ScreensMixin:
         form.grid(row=0, column=0, sticky="w", padx=6, pady=(8, 0))
         tk.Label(
             form,
-            text="Medir circuitos",
+            text=self.circuit_progress_title(),
             bg=WHITE,
             fg=PANEL_FG,
             font=("Arial", 18),
@@ -1217,7 +1260,7 @@ class ScreensMixin:
             root,
             [
                 ("Voltar atrás", "#303030", WHITE, self.go_back),
-                ("Apagar", RED, PANEL_FG, self.no_action),
+                ("Apagar", RED, PANEL_FG, self.restart_current_side_measurements),
                 ("Guardar\nDados", GREEN, PANEL_FG, self.save_session_and_return_to_login),
                 ("Confirmar", BLUE, PANEL_FG, self.save_session_and_return_to_login),
             ],
@@ -1230,6 +1273,31 @@ class ScreensMixin:
             self.save_session()
         self.logout()
         self.show_login()
+
+    def restart_current_side_measurements(self) -> None:
+        if self.session is None:
+            return
+
+        side = self.current_side or self.session.lado_molde
+        if not side:
+            return
+
+        self.session.medicoes = [
+            item for item in self.session.medicoes if item.get("lado") != side
+        ]
+        self.session.lado_molde = side
+        self.current_side = side
+        self.current_circuit = 1
+        self.samples = []
+        self.measurement_running = False
+        self.last_measurement_record = None
+        self.selected_index = 0
+        self.selected_result_index = 0
+        self.result_editing = False
+        self.input_value = ""
+        self.status_text = ""
+        self.save_session()
+        self.show_circuit_start()
 
     def measure_next_side(self) -> None:
         if self.session is not None:

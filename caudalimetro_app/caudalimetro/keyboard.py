@@ -190,6 +190,8 @@ class KeyboardMixin:
             self.input_value = self.input_value[:-1]
             if not self.update_field_value("input_value", self.input_value):
                 self.show_circuits()
+        elif self.screen == "SIDE_COMPLETE":
+            self.restart_current_side_measurements()
 
     def delete_all(self) -> None:
         if self.screen == "LOGIN":
@@ -222,6 +224,8 @@ class KeyboardMixin:
             self.input_value = ""
             if not self.update_field_value("input_value", ""):
                 self.show_circuits()
+        elif self.screen == "SIDE_COMPLETE":
+            self.restart_current_side_measurements()
 
     def select(self) -> None:
         if self.screen == "LOGIN":
