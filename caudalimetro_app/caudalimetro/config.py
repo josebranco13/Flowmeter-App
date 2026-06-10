@@ -22,7 +22,25 @@ DATA_DIR = BASE_DIR / "data"
 SESSIONS_DIR = DATA_DIR / "sessoes"
 SENT_DIR = DATA_DIR / "enviados"
 CSV_PATH = DATA_DIR / "medicoes.csv"
+OPERATORS_PATH = DATA_DIR / "operadores.json"
 
 DIAMETER_OPTIONS = [6, 8, 10, 12, 14, 16, 20, 25]
 MENU_OPTIONS = ["Medir caudal", "Enviar dados"]
-OPERATOR_OPTIONS = ["1001", "1002", "1003", "1004"]
+OPERATOR_PASSWORDS = {
+    "ADMIN": "7482",
+    "AMADO": "1936",
+    "ANGELOC": "6205",
+    "BERNARDO": "8517",
+    "CARLICIA": "3049",
+    "DIOGOL": "9721",
+    "JCSANTOS": "4658",
+    "LUISMIGUEL": "2390",
+    "MARCOPEREIRA": "5863",
+    "MARTINHO": "7140",
+    "MIGUEL": "0586",
+    "PLOURENÇO": "3927",
+    "RAFAELC": "8074",
+    "RANA": "1469",
+    "TONI": "6318",
+}
+OPERATOR_OPTIONS = list(OPERATOR_PASSWORDS.keys())

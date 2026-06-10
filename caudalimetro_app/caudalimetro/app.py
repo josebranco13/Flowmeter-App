@@ -10,6 +10,7 @@ from .config import (
     DIAMETER_OPTIONS,
     MENU_OPTIONS,
     OPERATOR_OPTIONS,
+    OPERATOR_PASSWORDS,
     SENT_DIR,
     SESSIONS_DIR,
 )
@@ -47,9 +48,18 @@ class CaudalimetroApp(
         self.active_field = 0
         self.selected_index = 0
         self.operator_options = OPERATOR_OPTIONS.copy()
+        self.operator_passwords = OPERATOR_PASSWORDS.copy()
         self.operator_list_open = False
         self.operator_selected_index = 0
         self.operator_visible_indices: list[int] = []
+        self.admin_operator_input = ""
+        self.admin_new_operator_name = ""
+        self.admin_new_operator_pin = ""
+        self.admin_add_active_field = 0
+        self.selected_admin_operator_index = 0
+        self.pending_admin_operator_removal = ""
+        self.admin_operator_labels: list[tk.Label] = []
+        self.admin_visible_indices: list[int] = []
         self.input_value = ""
         self.login_active_field = 0
         self.circuit_active_field = 0

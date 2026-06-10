@@ -40,6 +40,19 @@ class KeyboardMixin:
             self.move(1)
             return
 
+        if (
+            self.screen == "LOGIN"
+            and self.login_active_field == 0
+            and char
+            and char.isalnum()
+        ):
+            self.add_char(char.upper())
+            return
+
+        if self.screen == "ADMIN_ADD_OPERATOR" and char and char.isalnum():
+            self.add_char(char.upper())
+            return
+
         if self.screen == "MOLD" and char and char.isalnum():
             self.add_char(char.upper())
             return
@@ -113,6 +126,19 @@ class KeyboardMixin:
             self.selected_index = (self.selected_index + delta) % len(self.get_send_options())
             if not self.update_option_selection():
                 self.show_send_data()
+        elif self.screen == "ADMIN_OPERATORS":
+            operators = self.managed_operator_options()
+            if operators:
+                self.selected_admin_operator_index = (
+                    self.selected_admin_operator_index + delta
+                ) % len(operators)
+                if not self.update_admin_operator_selection():
+                    self.show_admin_operators()
+        elif self.screen == "ADMIN_ADD_OPERATOR":
+            self.admin_add_active_field = (self.admin_add_active_field + delta) % 2
+            self.show_admin_add_operator()
+        elif self.screen == "ADMIN_REMOVE_CONFIRM":
+            return
 
     def move_diameter_selection(self, delta: int) -> None:
         if not self.diameter_options:
@@ -132,7 +158,7 @@ class KeyboardMixin:
             if self.login_active_field == 0:
                 was_list_open = self.operator_list_open
                 self.operator_list_open = False
-                self.operator_id = (self.operator_id + char)[:12]
+                self.operator_id = (self.operator_id + char.upper())[:20]
                 if was_list_open or not self.update_field_value("operator_id", self.operator_id):
                     self.show_login()
             else:
@@ -158,6 +184,14 @@ class KeyboardMixin:
                 return
             self.input_value = (self.input_value + char)[:8]
             self.refresh_result_edit_display()
+        elif self.screen == "ADMIN_ADD_OPERATOR":
+            if self.admin_add_active_field == 0:
+                self.admin_new_operator_name = (
+                    self.admin_new_operator_name + char.upper()
+                )[:20]
+            elif char.isdigit():
+                self.admin_new_operator_pin = (self.admin_new_operator_pin + char)[:4]
+            self.refresh_admin_add_field()
 
     def delete_one(self) -> None:
         if self.screen == "LOGIN":
@@ -192,19 +226,20 @@ class KeyboardMixin:
                 self.show_circuits()
         elif self.screen == "SIDE_COMPLETE":
             self.restart_current_side_measurements()
+        elif self.screen == "ADMIN_OPERATORS":
+            self.remove_selected_admin_operator()
+        elif self.screen == "ADMIN_ADD_OPERATOR":
+            if self.admin_add_active_field == 0:
+                self.admin_new_operator_name = self.admin_new_operator_name[:-1]
+            else:
+                self.admin_new_operator_pin = self.admin_new_operator_pin[:-1]
+            self.refresh_admin_add_field()
+        elif self.screen == "ADMIN_REMOVE_CONFIRM":
+            self.cancel_admin_operator_removal()
 
     def delete_all(self) -> None:
         if self.screen == "LOGIN":
-            if self.login_active_field == 0:
-                was_list_open = self.operator_list_open
-                self.operator_list_open = False
-                self.operator_id = ""
-                if was_list_open or not self.update_field_value("operator_id", self.operator_id):
-                    self.show_login()
-            else:
-                self.pin = ""
-                if not self.update_field_value("pin", ""):
-                    self.show_login()
+            self.clear_login_values()
         elif self.screen in ("MOLD", "PRESSURE"):
             self.input_value = ""
             self.refresh_current_screen()
@@ -226,6 +261,16 @@ class KeyboardMixin:
                 self.show_circuits()
         elif self.screen == "SIDE_COMPLETE":
             self.restart_current_side_measurements()
+        elif self.screen == "ADMIN_OPERATORS":
+            self.remove_selected_admin_operator()
+        elif self.screen == "ADMIN_ADD_OPERATOR":
+            if self.admin_add_active_field == 0:
+                self.admin_new_operator_name = ""
+            else:
+                self.admin_new_operator_pin = ""
+            self.refresh_admin_add_field()
+        elif self.screen == "ADMIN_REMOVE_CONFIRM":
+            self.cancel_admin_operator_removal()
 
     def select(self) -> None:
         if self.screen == "LOGIN":
@@ -264,6 +309,18 @@ class KeyboardMixin:
             return
 
         if self.screen == "SEND_REVIEW":
+            return
+
+        if self.screen == "ADMIN_OPERATORS":
+            self.show_admin_add_operator()
+            return
+
+        if self.screen == "ADMIN_ADD_OPERATOR":
+            self.save_admin_operator()
+            return
+
+        if self.screen == "ADMIN_REMOVE_CONFIRM":
+            self.confirm_admin_operator_removal()
             return
 
         self.confirm()
@@ -311,12 +368,32 @@ class KeyboardMixin:
     def confirm(self) -> None:
         if self.screen == "LOGIN":
             self.operator_list_open = False
+            self.operator_id = self.normalize_operator_name(self.operator_id)
             if not self.operator_id or not self.pin:
-                self.status_text = "Preencha o nº de operador e o PIN."
+                self.status_text = "Preencha o operador e o PIN."
+                self.show_login()
+                return
+            self.refresh_operator_options()
+            if self.operator_id not in self.operator_options:
+                self.status_text = "Selecione um operador válido."
+                self.show_login()
+                return
+            if self.operator_expected_pin(self.operator_id) is None:
+                self.status_text = "Operador sem PIN configurado."
+                self.show_login()
+                return
+            if not self.operator_pin_matches(self.operator_id, self.pin):
+                self.status_text = "PIN incorreto para este operador."
+                self.pin = ""
                 self.show_login()
                 return
             self.status_text = ""
-            self.show_menu()
+            if self.operator_id == "ADMIN":
+                self.admin_operator_input = ""
+                self.selected_admin_operator_index = 0
+                self.show_admin_operators()
+            else:
+                self.show_menu()
 
         elif self.screen == "MENU":
             option = self.menu_options[self.selected_index]
@@ -434,11 +511,6 @@ class KeyboardMixin:
                 self.status_text = ""
                 self.selected_index = 0
                 self.show_send_review()
-            elif self.selected_index == 1:
-                count = self.simulate_send_pending_sessions()
-                self.status_text = f"Envio concluído. Sessões enviadas: {count}."
-                self.selected_index = 0
-                self.show_send_data()
             else:
                 self.selected_index = 0
                 self.show_menu()
@@ -449,13 +521,21 @@ class KeyboardMixin:
             self.selected_index = 0
             self.show_send_data()
 
+        elif self.screen == "ADMIN_OPERATORS":
+            self.logout_to_login()
+
+        elif self.screen == "ADMIN_ADD_OPERATOR":
+            self.cancel_admin_add_operator()
+
+        elif self.screen == "ADMIN_REMOVE_CONFIRM":
+            return
+
     def go_back(self) -> None:
         if self.screen == "LOGIN":
-            if self.operator_list_open:
-                self.operator_list_open = False
-                self.show_login()
+            self.clear_login_values()
             return
         if self.screen == "MENU":
+            self.logout_to_login()
             return
         elif self.screen == "MOLD":
             self.show_menu()
@@ -500,6 +580,12 @@ class KeyboardMixin:
         elif self.screen == "SEND_REVIEW":
             self.selected_index = 0
             self.show_send_data()
+        elif self.screen == "ADMIN_OPERATORS":
+            self.logout_to_login()
+        elif self.screen == "ADMIN_ADD_OPERATOR":
+            self.cancel_admin_add_operator()
+        elif self.screen == "ADMIN_REMOVE_CONFIRM":
+            self.cancel_admin_operator_removal()
         elif self.screen in ("SUMMARY", "SEND"):
             self.show_menu()
 

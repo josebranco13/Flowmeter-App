@@ -156,7 +156,7 @@ class MeasurementMixin:
                 item.get("lado") == self.current_side
                 and item.get("circuito") == self.current_circuit
             ):
-                item["destacado"] = True
+                item["destacado"] = not bool(item.get("destacado"))
                 self.last_measurement_record = item
                 break
 

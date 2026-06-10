@@ -22,7 +22,19 @@ class UiComponentsMixin:
         for child in self.winfo_children():
             child.destroy()
 
-    def build_base(self, title: str, step: str) -> tk.Frame:
+    def build_base(
+        self,
+        title: str,
+        step: str,
+        confirm_text: str = "Confirmar",
+        back_text: str = "Voltar",
+        back_command=None,
+        delete_text: str = "Apagar",
+        delete_command=None,
+        select_text: str = "Selecionar",
+        select_command=None,
+        confirm_command=None,
+    ) -> tk.Frame:
         self.clear()
         self.option_labels = []
         self.diameter_labels = []
@@ -65,7 +77,17 @@ class UiComponentsMixin:
                 font=("Arial", 12, "bold"),
             ).pack(fill="x", padx=22, pady=(0, 4))
 
-        self.build_footer(root)
+        self.build_footer(
+            root,
+            confirm_text=confirm_text,
+            back_text=back_text,
+            back_command=back_command,
+            delete_text=delete_text,
+            delete_command=delete_command,
+            select_text=select_text,
+            select_command=select_command,
+            confirm_command=confirm_command,
+        )
         return panel
 
     def build_keypad_help(self, parent: tk.Widget) -> tk.Frame:
@@ -109,15 +131,30 @@ class UiComponentsMixin:
             ).pack(side="left", padx=8)
         return frame
 
-    def build_footer(self, parent: tk.Widget) -> None:
+    def build_footer(
+        self,
+        parent: tk.Widget,
+        confirm_text: str = "Confirmar",
+        back_text: str = "Voltar",
+        back_command=None,
+        delete_text: str = "Apagar",
+        delete_command=None,
+        select_text: str = "Selecionar",
+        select_command=None,
+        confirm_command=None,
+    ) -> None:
         footer = tk.Frame(parent, bg=APP_BG)
         footer.pack(fill="x", padx=22, pady=(4, 14))
 
+        back_command = back_command or self.go_back
+        delete_command = delete_command or self.delete_one
+        select_command = select_command or self.select
+        confirm_command = confirm_command or self.confirm
         buttons = [
-            ("Voltar", BLACK, self.go_back),
-            ("Apagar", RED, self.delete_one),
-            ("Selecionar", GREEN, self.select),
-            ("Confirmar", BLUE, self.confirm),
+            (back_text, BLACK, back_command),
+            (delete_text, RED, delete_command),
+            (select_text, GREEN, select_command),
+            (confirm_text, BLUE, confirm_command),
         ]
         for text, color, command in buttons:
             tk.Button(
@@ -219,7 +256,7 @@ class UiComponentsMixin:
             self.operator_visible_indices = []
             for label, (index, operator) in zip(self.option_labels, visible_options):
                 self.operator_visible_indices.append(index)
-                label.configure(text=f"Operador {operator}")
+                label.configure(text=operator)
                 self.style_option_label(label, index == self.operator_selected_index)
         except tk.TclError:
             return False

@@ -3,7 +3,7 @@ from __future__ import annotations
 import tkinter as tk
 from typing import Any
 
-from .config import BLUE, GREEN, GREY, PANEL_BG, PANEL_FG, RED, WHITE
+from .config import APP_BG, BLUE, GREEN, GREY, PANEL_BG, PANEL_FG, RED, WHITE
 
 
 class ScreensMixin:
@@ -30,7 +30,7 @@ class ScreensMixin:
         self.field_value_labels["operator_id"] = self.login_field_row(
             form,
             0,
-            "Nº operador",
+            "Operador",
             self.operator_id,
             show_arrow=True,
         )
@@ -48,7 +48,7 @@ class ScreensMixin:
             dropdown = tk.Frame(form, bg=WHITE)
             dropdown.grid(row=2, column=1, sticky="ew", pady=(8, 0))
             for index, operator in visible_options:
-                label = tk.Label(dropdown, text=f"Operador {operator}", pady=8, padx=10, anchor="w")
+                label = tk.Label(dropdown, text=operator, pady=8, padx=10, anchor="w")
                 self.style_option_label(label, index == self.operator_selected_index)
                 label.pack(fill="x", pady=1)
                 self.option_labels.append(label)
@@ -116,7 +116,7 @@ class ScreensMixin:
         footer.pack(side="bottom", fill="x")
 
         buttons = [
-            ("Apagar tudo", "#303030", WHITE, self.clear_login_values),
+            ("Apagar tudo", "#303030", WHITE, self.delete_all),
             ("Apagar", RED, PANEL_FG, self.delete_one),
             ("Selecionar", GREEN, PANEL_FG, self.select),
             ("Confirmar", BLUE, PANEL_FG, self.confirm),
@@ -142,8 +142,12 @@ class ScreensMixin:
         self.operator_id = ""
         self.pin = ""
         self.operator_list_open = False
+        self.operator_visible_indices = []
         self.login_active_field = 0
+        self.operator_selected_index = 0
         self.status_text = ""
+        self.update_field_value("operator_id", "")
+        self.update_field_value("pin", "")
         self.show_login()
 
     def visible_operator_options(self) -> list[tuple[int, str]]:
@@ -156,10 +160,356 @@ class ScreensMixin:
         end = start + max_visible
         return list(enumerate(self.operator_options[start:end], start=start))
 
+    def visible_admin_operator_options(self) -> list[tuple[int, str]]:
+        operators = self.managed_operator_options()
+        max_visible = 6
+        if len(operators) <= max_visible:
+            return list(enumerate(operators))
+
+        start = self.selected_admin_operator_index - 3
+        start = max(0, min(start, len(operators) - max_visible))
+        end = start + max_visible
+        return list(enumerate(operators[start:end], start=start))
+
+    def show_admin_operators(self) -> None:
+        self.screen = "ADMIN_OPERATORS"
+        self.refresh_operator_options()
+        admin_status_text = self.status_text
+        operators = self.managed_operator_options()
+        if operators:
+            self.selected_admin_operator_index = min(
+                self.selected_admin_operator_index,
+                len(operators) - 1,
+            )
+        else:
+            self.selected_admin_operator_index = 0
+
+        self.status_text = ""
+        panel = self.build_base(
+            "Operadores",
+            "Admin",
+            back_text="Logout",
+            back_command=self.logout_to_login,
+            delete_text="Remover",
+            delete_command=self.remove_selected_admin_operator,
+            select_text="Adicionar Operador",
+            select_command=self.show_admin_add_operator,
+            confirm_text="Sair",
+            confirm_command=self.logout_to_login,
+        )
+        self.status_text = admin_status_text
+
+        if admin_status_text:
+            tk.Label(
+                panel,
+                text=admin_status_text,
+                bg=PANEL_BG,
+                fg="#c48b00",
+                font=("Arial", 12, "bold"),
+            ).pack(fill="x", padx=60, pady=(18, 6))
+
+        tk.Label(
+            panel,
+            text="Operadores ativos",
+            bg=PANEL_BG,
+            fg="#555555",
+            font=("Arial", 12, "bold"),
+        ).pack(fill="x", padx=60, pady=(22 if not admin_status_text else 4, 2))
+
+        visible_options = self.visible_admin_operator_options()
+        self.admin_operator_labels = []
+        self.admin_visible_indices = [index for index, _ in visible_options]
+        if visible_options:
+            for index, operator in visible_options:
+                label = tk.Label(panel, text=operator, pady=6, padx=10, anchor="w")
+                self.style_option_label(label, index == self.selected_admin_operator_index)
+                label.pack(fill="x", padx=60, pady=2)
+                self.admin_operator_labels.append(label)
+        else:
+            tk.Label(
+                panel,
+                text="Sem operadores criados.",
+                bg=PANEL_BG,
+                fg="#555555",
+                font=("Arial", 12),
+            ).pack(fill="x", padx=60, pady=12)
+
+        if len(operators) > len(visible_options):
+            tk.Label(
+                panel,
+                text=f"A mostrar {len(visible_options)} de {len(operators)} operadores.",
+                bg=PANEL_BG,
+                fg="#555555",
+                font=("Arial", 10),
+            ).pack(fill="x", padx=60, pady=(4, 0))
+
+    def update_admin_operator_selection(self) -> bool:
+        visible_options = self.visible_admin_operator_options()
+        if len(self.admin_operator_labels) != len(visible_options):
+            return False
+
+        try:
+            self.admin_visible_indices = []
+            for label, (index, operator) in zip(self.admin_operator_labels, visible_options):
+                self.admin_visible_indices.append(index)
+                label.configure(text=operator)
+                self.style_option_label(label, index == self.selected_admin_operator_index)
+        except tk.TclError:
+            return False
+
+        return True
+
+    def show_admin_add_operator(self) -> None:
+        self.screen = "ADMIN_ADD_OPERATOR"
+        add_status_text = self.status_text
+        self.status_text = ""
+        panel = self.build_base(
+            "Adicionar operador",
+            "Admin",
+            back_text="Voltar",
+            back_command=self.cancel_admin_add_operator,
+            delete_text="Apagar",
+            delete_command=self.delete_one,
+            select_text="Guardar",
+            select_command=self.save_admin_operator,
+            confirm_text="Sair",
+            confirm_command=self.cancel_admin_add_operator,
+        )
+        self.status_text = add_status_text
+
+        form = tk.Frame(panel, bg=PANEL_BG)
+        form.pack(expand=True)
+        self.admin_add_field_row(
+            form,
+            0,
+            "Operador:",
+            self.admin_new_operator_name,
+            self.admin_add_active_field == 0,
+            "admin_new_operator_name",
+        )
+        self.admin_add_field_row(
+            form,
+            1,
+            "PIN:",
+            "●" * len(self.admin_new_operator_pin),
+            self.admin_add_active_field == 1,
+            "admin_new_operator_pin",
+        )
+
+        if add_status_text:
+            tk.Label(
+                panel,
+                text=add_status_text,
+                bg=PANEL_BG,
+                fg="#c48b00",
+                font=("Arial", 12, "bold"),
+            ).pack(fill="x", padx=60, pady=(0, 18))
+
+    def admin_add_field_row(
+        self,
+        parent: tk.Widget,
+        row: int,
+        label_text: str,
+        value: str,
+        active: bool,
+        key: str,
+    ) -> None:
+        tk.Label(
+            parent,
+            text=label_text,
+            bg=PANEL_BG,
+            fg=PANEL_FG,
+            font=("Arial", 18, "bold"),
+            width=10,
+            anchor="e",
+        ).grid(row=row, column=0, sticky="e", padx=(0, 12), pady=8)
+        field = tk.Frame(
+            parent,
+            bg=GREY,
+            width=300,
+            height=42,
+            highlightbackground="#087cff" if active else PANEL_BG,
+            highlightcolor="#087cff" if active else PANEL_BG,
+            highlightthickness=3,
+        )
+        field.grid(row=row, column=1, sticky="w", pady=8)
+        field.pack_propagate(False)
+        label = tk.Label(
+            field,
+            text=value or " ",
+            bg=GREY,
+            fg=PANEL_FG,
+            font=("Arial", 16, "bold"),
+            anchor="w",
+            padx=8,
+        )
+        label.pack(fill="both", expand=True)
+        self.field_value_labels[key] = label
+
+    def refresh_admin_add_field(self) -> None:
+        key = (
+            "admin_new_operator_name"
+            if self.admin_add_active_field == 0
+            else "admin_new_operator_pin"
+        )
+        value = (
+            self.admin_new_operator_name
+            if self.admin_add_active_field == 0
+            else "●" * len(self.admin_new_operator_pin)
+        )
+        if not self.update_field_value(key, value):
+            self.show_admin_add_operator()
+
+    def cancel_admin_add_operator(self) -> None:
+        self.admin_new_operator_name = ""
+        self.admin_new_operator_pin = ""
+        self.admin_add_active_field = 0
+        self.status_text = ""
+        self.show_admin_operators()
+
+    def refresh_admin_operator_input(self) -> None:
+        if not self.update_field_value("admin_operator_input", self.admin_operator_input):
+            self.show_admin_operators()
+
+    def save_admin_operator(self) -> None:
+        success, message = self.add_operator(
+            self.admin_new_operator_name,
+            self.admin_new_operator_pin,
+        )
+        self.status_text = message
+        if success:
+            new_operator = self.normalize_operator_name(self.admin_new_operator_name)
+            self.admin_new_operator_name = ""
+            self.admin_new_operator_pin = ""
+            self.admin_add_active_field = 0
+            operators = self.managed_operator_options()
+            if new_operator in operators:
+                self.selected_admin_operator_index = operators.index(new_operator)
+            self.show_admin_operators()
+        else:
+            self.show_admin_add_operator()
+
+    def remove_selected_admin_operator(self) -> None:
+        operators = self.managed_operator_options()
+        if not operators:
+            self.status_text = "Não existem operadores para remover."
+            self.show_admin_operators()
+            return
+
+        self.selected_admin_operator_index = min(
+            self.selected_admin_operator_index,
+            len(operators) - 1,
+        )
+        operator = operators[self.selected_admin_operator_index]
+        self.pending_admin_operator_removal = operator
+        self.status_text = ""
+        self.show_admin_remove_confirmation()
+
+    def show_admin_remove_confirmation(self) -> None:
+        self.screen = "ADMIN_REMOVE_CONFIRM"
+        self.clear()
+        self.option_labels = []
+        self.diameter_labels = []
+        self.field_value_labels = {}
+
+        operator = self.pending_admin_operator_removal or "-"
+
+        root = tk.Frame(self, bg=APP_BG)
+        root.pack(fill="both", expand=True)
+
+        header = tk.Frame(root, bg=APP_BG)
+        header.pack(fill="x", padx=22, pady=(16, 8))
+        tk.Label(
+            header,
+            text="Remover operador",
+            bg=APP_BG,
+            fg=WHITE,
+            font=("Arial", 22, "bold"),
+        ).pack(side="left")
+        tk.Label(
+            header,
+            text="Admin",
+            bg=APP_BG,
+            fg="#cfd6df",
+            font=("Arial", 11),
+        ).pack(side="right")
+
+        body = tk.Frame(root, bg=APP_BG)
+        body.pack(fill="both", expand=True, padx=22, pady=6)
+
+        panel = tk.Frame(body, bg=PANEL_BG, bd=0, highlightthickness=0)
+        panel.pack(fill="both", expand=True)
+
+        content = tk.Frame(panel, bg=PANEL_BG)
+        content.pack(expand=True)
+        tk.Label(
+            content,
+            text="Pretende remover este operador?",
+            bg=PANEL_BG,
+            fg=PANEL_FG,
+            font=("Arial", 20, "bold"),
+        ).pack(pady=(0, 16))
+        tk.Label(
+            content,
+            text=operator,
+            bg=PANEL_BG,
+            fg=BLUE,
+            font=("Arial", 28, "bold"),
+        ).pack()
+
+        footer = tk.Frame(root, bg=APP_BG)
+        footer.pack(fill="x", padx=22, pady=(4, 14))
+        for text, bg, command in [
+            ("Não", RED, self.cancel_admin_operator_removal),
+            ("Sim", GREEN, self.confirm_admin_operator_removal),
+        ]:
+            tk.Button(
+                footer,
+                text=text,
+                command=command,
+                bg=bg,
+                fg=WHITE,
+                activebackground=bg,
+                activeforeground=WHITE,
+                relief="flat",
+                font=("Arial", 13, "bold"),
+                padx=18,
+                pady=14,
+            ).pack(side="left", expand=True, fill="x", padx=3)
+
+    def cancel_admin_operator_removal(self) -> None:
+        self.pending_admin_operator_removal = ""
+        self.status_text = ""
+        self.show_admin_operators()
+
+    def confirm_admin_operator_removal(self) -> None:
+        operator = self.pending_admin_operator_removal
+        if not operator:
+            self.status_text = "Nenhum operador selecionado."
+            self.show_admin_operators()
+            return
+
+        _, self.status_text = self.remove_operator(operator)
+        self.pending_admin_operator_removal = ""
+        remaining = self.managed_operator_options()
+        if remaining:
+            self.selected_admin_operator_index = min(
+                self.selected_admin_operator_index,
+                len(remaining) - 1,
+            )
+        else:
+            self.selected_admin_operator_index = 0
+        self.show_admin_operators()
+
     def show_menu(self) -> None:
         self.screen = "MENU"
         self.selected_index = min(self.selected_index, len(self.menu_options) - 1)
-        panel = self.build_base("Menu principal", "2/8")
+        panel = self.build_base(
+            "Menu principal",
+            "2/8",
+            back_text="Logout",
+            back_command=self.logout_to_login,
+        )
         tk.Label(
             panel,
             text=f"Operador: {self.operator_id}",
@@ -169,6 +519,10 @@ class ScreensMixin:
         ).pack(pady=(26, 12))
         for i, option in enumerate(self.menu_options):
             self.option_row(panel, option, i == self.selected_index)
+
+    def logout_to_login(self) -> None:
+        self.logout()
+        self.show_login()
 
     def show_mold(self) -> None:
         self.screen = "MOLD"
@@ -546,12 +900,6 @@ class ScreensMixin:
     def measurement_badge_text(self) -> str:
         return self.setup_badge_text(include_circuit_count=True, include_pressure=True)
 
-    def active_measurement_badge_text(self) -> str:
-        lines = [self.measurement_badge_text()]
-        if self.current_circuit:
-            lines.append(f"circuito {self.current_circuit}")
-        return "\n".join(line for line in lines if line)
-
     @staticmethod
     def format_flow_display(value: Any) -> str:
         try:
@@ -806,12 +1154,19 @@ class ScreensMixin:
         assert self.session is not None
         tk.Label(
             form,
+            text=f"circuito {self.current_circuit}",
+            bg=WHITE,
+            fg=PANEL_FG,
+            font=("Arial", 14),
+        ).grid(row=0, column=0, columnspan=6, sticky="w", pady=(0, 18))
+        tk.Label(
+            form,
             text="Caudal atual:",
             bg=WHITE,
             fg=PANEL_FG,
             font=("Arial", 12),
-        ).grid(row=0, column=0, sticky="w", pady=(0, 24))
-        current = self.measure_value_box(form, 0, 1, 84, "")
+        ).grid(row=1, column=0, sticky="w", pady=(0, 24))
+        current = self.measure_value_box(form, 1, 1, 84, "")
         self.measure_labels["current"] = current
 
         labels = [("Min:", "min"), ("Med:", "avg"), ("Max:", "max")]
@@ -823,8 +1178,8 @@ class ScreensMixin:
                 bg=WHITE,
                 fg=PANEL_FG,
                 font=("Arial", 12),
-            ).grid(row=1, column=col, sticky="w", padx=(0, 2))
-            self.measure_labels[key] = self.measure_value_box(form, 1, col + 1, 54, "")
+            ).grid(row=2, column=col, sticky="w", padx=(0, 2))
+            self.measure_labels[key] = self.measure_value_box(form, 2, col + 1, 54, "")
 
         self.build_simple_footer(
             root,
@@ -838,7 +1193,7 @@ class ScreensMixin:
         )
         self.place_orange_badge(
             root,
-            self.active_measurement_badge_text(),
+            self.measurement_badge_text(),
             font_size=10,
             padx=18,
         )
@@ -1407,11 +1762,11 @@ class ScreensMixin:
         ).pack(pady=12)
 
     def get_send_options(self) -> list[str]:
-        return ["Verificar medições", "Enviar agora", "Voltar ao menu"]
+        return ["Verificar medições", "Voltar ao menu"]
 
     def show_send_review(self) -> None:
         self.screen = "SEND_REVIEW"
-        panel = self.build_base("Verificar medições", "Pré-envio")
+        panel = self.build_base("Verificar medições", "Pré-envio", confirm_text="Enviar")
         sessions = self.load_pending_sessions()
         rows = self.pending_measurement_rows(sessions)
 

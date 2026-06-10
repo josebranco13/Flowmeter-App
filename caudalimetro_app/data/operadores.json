@@ -1,0 +1,36 @@
+{
+  "operators": [
+    "ADMIN",
+    "AMADO",
+    "ANGELOC",
+    "BERNARDO",
+    "CARLICIA",
+    "DIOGOL",
+    "JCSANTOS",
+    "LUISMIGUEL",
+    "MARCOPEREIRA",
+    "MARTINHO",
+    "MIGUEL",
+    "PLOURENÇO",
+    "RAFAELC",
+    "RANA",
+    "TONI"
+  ],
+  "passwords": {
+    "ADMIN": "7482",
+    "AMADO": "1936",
+    "ANGELOC": "6205",
+    "BERNARDO": "8517",
+    "CARLICIA": "3049",
+    "DIOGOL": "9721",
+    "JCSANTOS": "4658",
+    "LUISMIGUEL": "2390",
+    "MARCOPEREIRA": "5863",
+    "MARTINHO": "7140",
+    "MIGUEL": "0586",
+    "PLOURENÇO": "3927",
+    "RAFAELC": "8074",
+    "RANA": "1469",
+    "TONI": "6318"
+  }
+}
