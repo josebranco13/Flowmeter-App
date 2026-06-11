@@ -5,6 +5,7 @@ import json
 import shutil
 from dataclasses import asdict
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -206,6 +207,137 @@ class PersistenceMixin:
             if not exists:
                 writer.writeheader()
             writer.writerow(asdict(record))
+
+    def pending_session_file(self, file_name: str) -> Path | None:
+        if file_name != Path(file_name).name:
+            return None
+        path = SESSIONS_DIR / file_name
+        if path.suffix.lower() != ".json":
+            return None
+        return path
+
+    def load_pending_session_file(
+        self, file_name: str
+    ) -> tuple[Path, dict[str, Any]] | None:
+        path = self.pending_session_file(file_name)
+        if path is None or not path.exists():
+            return None
+        try:
+            with path.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return None
+        if not isinstance(data, dict) or data.get("enviado_em"):
+            return None
+        return path, data
+
+    def delete_pending_session(self, file_name: str) -> bool:
+        loaded = self.load_pending_session_file(file_name)
+        if loaded is None:
+            return False
+
+        path, _ = loaded
+        try:
+            path.unlink()
+        except OSError:
+            return False
+        return True
+
+    def simulate_send_pending_session(self, file_name: str) -> bool:
+        loaded = self.load_pending_session_file(file_name)
+        if loaded is None:
+            return False
+
+        path, data = loaded
+        SENT_DIR.mkdir(parents=True, exist_ok=True)
+        sent_at = datetime.now().isoformat(timespec="seconds")
+        data["estado"] = "enviado"
+        data["atualizado_em"] = sent_at
+        data["enviado_em"] = sent_at
+        try:
+            with path.open("w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            shutil.copy2(path, SENT_DIR / path.name)
+        except OSError:
+            return False
+        return True
+
+    def delete_pending_measurement(self, file_name: str, measurement_index: int) -> bool:
+        loaded = self.load_pending_session_file(file_name)
+        if loaded is None:
+            return False
+
+        path, data = loaded
+        measurements = data.get("medicoes")
+        if not isinstance(measurements, list):
+            return False
+        if measurement_index < 0 or measurement_index >= len(measurements):
+            return False
+
+        measurements.pop(measurement_index)
+        data["atualizado_em"] = datetime.now().isoformat(timespec="seconds")
+        if measurements:
+            try:
+                with path.open("w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+            except OSError:
+                return False
+        else:
+            try:
+                path.unlink()
+            except OSError:
+                return False
+        return True
+
+    def simulate_send_pending_measurement(
+        self, file_name: str, measurement_index: int
+    ) -> bool:
+        loaded = self.load_pending_session_file(file_name)
+        if loaded is None:
+            return False
+
+        path, data = loaded
+        measurements = data.get("medicoes")
+        if not isinstance(measurements, list):
+            return False
+        if measurement_index < 0 or measurement_index >= len(measurements):
+            return False
+
+        SENT_DIR.mkdir(parents=True, exist_ok=True)
+        sent_at = datetime.now().isoformat(timespec="seconds")
+        if len(measurements) == 1:
+            data["estado"] = "enviado"
+            data["atualizado_em"] = sent_at
+            data["enviado_em"] = sent_at
+            try:
+                with path.open("w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                shutil.copy2(path, SENT_DIR / path.name)
+            except OSError:
+                return False
+            return True
+
+        selected_measurement = measurements[measurement_index]
+        sent_data = data.copy()
+        sent_data["estado"] = "enviado"
+        sent_data["atualizado_em"] = sent_at
+        sent_data["enviado_em"] = sent_at
+        sent_data["medicoes"] = [selected_measurement]
+        sent_name = (
+            f"{path.stem}_medicao_{measurement_index + 1}_"
+            f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:6]}.json"
+        )
+        try:
+            with (SENT_DIR / sent_name).open("w", encoding="utf-8") as f:
+                json.dump(sent_data, f, ensure_ascii=False, indent=2)
+
+            measurements.pop(measurement_index)
+            data["atualizado_em"] = sent_at
+            with path.open("w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except OSError:
+            return False
+        return True
 
     def simulate_send_pending_sessions(self) -> int:
         SESSIONS_DIR.mkdir(parents=True, exist_ok=True)

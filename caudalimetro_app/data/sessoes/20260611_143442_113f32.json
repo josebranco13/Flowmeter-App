@@ -1,0 +1,16 @@
+{
+  "session_id": "20260611_143442_113f32",
+  "operador": "AMADO",
+  "molde": "AHA2",
+  "lado_molde": "Fixed plate",
+  "diametro_mm": 8,
+  "pressao_entrada_bar": 0.0,
+  "circuitos_por_lado": {
+    "Fixed plate": 2
+  },
+  "estado": "em_medicao",
+  "criado_em": "2026-06-11T14:34:42",
+  "atualizado_em": "2026-06-11T14:34:48",
+  "enviado_em": null,
+  "medicoes": []
+}

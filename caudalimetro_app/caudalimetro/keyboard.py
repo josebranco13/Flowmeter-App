@@ -126,6 +126,12 @@ class KeyboardMixin:
             self.selected_index = (self.selected_index + delta) % len(self.get_send_options())
             if not self.update_option_selection():
                 self.show_send_data()
+        elif self.screen == "SEND_REVIEW":
+            rows = self.pending_measurement_rows(self.load_pending_sessions())
+            if rows:
+                session_count = self.pending_review_session_count(rows)
+                self.selected_index = (self.selected_index + delta) % session_count
+                self.show_send_review()
         elif self.screen == "ADMIN_OPERATORS":
             operators = self.managed_operator_options()
             if operators:
@@ -147,11 +153,7 @@ class KeyboardMixin:
         self.selected_index = (self.selected_index + delta) % len(self.diameter_options)
 
     def update_input_value_field(self) -> bool:
-        if self.screen == "PRESSURE":
-            value = f"{self.input_value} bar" if self.input_value else ""
-        else:
-            value = self.input_value
-        return self.update_field_value("input_value", value)
+        return self.update_field_value("input_value", self.input_value)
 
     def add_char(self, char: str) -> None:
         if self.screen == "LOGIN":
@@ -226,6 +228,8 @@ class KeyboardMixin:
                 self.show_circuits()
         elif self.screen == "SIDE_COMPLETE":
             self.restart_current_side_measurements()
+        elif self.screen == "SEND_REVIEW":
+            self.delete_selected_pending_session()
         elif self.screen == "ADMIN_OPERATORS":
             self.remove_selected_admin_operator()
         elif self.screen == "ADMIN_ADD_OPERATOR":
@@ -309,6 +313,7 @@ class KeyboardMixin:
             return
 
         if self.screen == "SEND_REVIEW":
+            self.send_selected_pending_session()
             return
 
         if self.screen == "ADMIN_OPERATORS":

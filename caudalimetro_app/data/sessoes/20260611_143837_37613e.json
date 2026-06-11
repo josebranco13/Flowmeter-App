@@ -1,0 +1,45 @@
+{
+  "session_id": "20260611_143837_37613e",
+  "operador": "ANGELOC",
+  "molde": "AHA2",
+  "lado_molde": "Fixed plate",
+  "diametro_mm": 8,
+  "pressao_entrada_bar": 4.0,
+  "circuitos_por_lado": {
+    "Fixed plate": 2
+  },
+  "estado": "concluida",
+  "criado_em": "2026-06-11T14:38:37",
+  "atualizado_em": "2026-06-11T14:39:19",
+  "enviado_em": null,
+  "medicoes": [
+    {
+      "session_id": "20260611_143837_37613e",
+      "operador": "ANGELOC",
+      "molde": "AHA2",
+      "diametro_mm": 8,
+      "pressao_entrada_bar": 4.0,
+      "lado": "Fixed plate",
+      "circuito": 1,
+      "caudal_min_l_min": 4.29,
+      "caudal_medio_l_min": 4.33,
+      "caudal_max_l_min": 4.38,
+      "amostras": 2,
+      "medido_em": "2026-06-11T14:38:53"
+    },
+    {
+      "session_id": "20260611_143837_37613e",
+      "operador": "ANGELOC",
+      "molde": "AHA2",
+      "diametro_mm": 8,
+      "pressao_entrada_bar": 4.0,
+      "lado": "Fixed plate",
+      "circuito": 2,
+      "caudal_min_l_min": 4.27,
+      "caudal_medio_l_min": 4.73,
+      "caudal_max_l_min": 5.2,
+      "amostras": 2,
+      "medido_em": "2026-06-11T14:39:13"
+    }
+  ]
+}

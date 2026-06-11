@@ -1766,7 +1766,12 @@ class ScreensMixin:
 
     def show_send_review(self) -> None:
         self.screen = "SEND_REVIEW"
-        panel = self.build_base("Verificar medições", "Pré-envio", confirm_text="Enviar")
+        panel = self.build_base(
+            "Verificar medições",
+            "Pré-envio",
+            select_text="Enviar selecionado",
+            confirm_text="Enviar",
+        )
         sessions = self.load_pending_sessions()
         rows = self.pending_measurement_rows(sessions)
 
@@ -1786,20 +1791,25 @@ class ScreensMixin:
         ).pack(pady=(0, 12))
 
         if rows:
+            session_count = self.pending_review_session_count(rows)
+            self.selected_index = min(self.selected_index, session_count - 1)
             max_rows = 10 if self.winfo_height() >= 700 else 5
-            visible_rows = rows[:max_rows]
+            first_visible_row = self.first_visible_pending_row(rows, max_rows)
+            visible_rows = rows[first_visible_row : first_visible_row + max_rows]
             table = tk.Frame(panel, bg=PANEL_BG)
             table.pack(fill="x", padx=24, pady=(0, 6))
             headers = [
                 ("Data", 14),
-                ("Molde", 12),
-                ("Lado", 5),
+                ("Operador", 12),
+                ("Molde", 10),
+                ("Lado", 12),
                 ("Circ.", 5),
                 ("Min", 8),
                 ("Médio", 8),
                 ("Máx", 8),
             ]
             for col, (header, width) in enumerate(headers):
+                table.grid_columnconfigure(col, weight=width)
                 tk.Label(
                     table,
                     text=header,
@@ -1811,8 +1821,10 @@ class ScreensMixin:
                 ).grid(row=0, column=col, padx=1, sticky="ew")
 
             for row_index, item in enumerate(visible_rows, start=1):
+                is_selected = item["_session_index"] == self.selected_index
                 values = [
                     item["data"],
+                    item["operador"],
                     item["molde"],
                     item["lado"],
                     item["circuito"],
@@ -1824,17 +1836,21 @@ class ScreensMixin:
                     tk.Label(
                         table,
                         text=value,
-                        bg=WHITE,
-                        fg=PANEL_FG,
-                        font=("Arial", 10),
+                        bg=BLUE if is_selected else WHITE,
+                        fg=WHITE if is_selected else PANEL_FG,
+                        font=("Arial", 10, "bold" if is_selected else "normal"),
                         width=headers[col][1],
                         pady=4,
                     ).grid(row=row_index, column=col, padx=1, pady=1, sticky="ew")
 
             if len(rows) > max_rows:
+                last_visible_row = first_visible_row + len(visible_rows)
                 tk.Label(
                     panel,
-                    text=f"A mostrar {max_rows} de {len(rows)} medições.",
+                    text=(
+                        f"A mostrar {first_visible_row + 1}-{last_visible_row} "
+                        f"de {len(rows)} medições."
+                    ),
                     bg=PANEL_BG,
                     fg="#555555",
                     font=("Arial", 10),
@@ -1859,24 +1875,112 @@ class ScreensMixin:
             font=("Arial", 11),
         ).pack(pady=(8, 0))
 
-    def pending_measurement_rows(self, sessions: list[dict[str, Any]]) -> list[dict[str, str]]:
-        rows: list[dict[str, str]] = []
+    def pending_review_session_count(self, rows: list[dict[str, Any]]) -> int:
+        if not rows:
+            return 0
+        return max(int(row["_session_index"]) for row in rows) + 1
+
+    def first_visible_pending_row(
+        self, rows: list[dict[str, Any]], max_rows: int
+    ) -> int:
+        selected_row_indexes = [
+            index
+            for index, row in enumerate(rows)
+            if row["_session_index"] == self.selected_index
+        ]
+        if not selected_row_indexes:
+            return 0
+
+        selected_first = selected_row_indexes[0]
+        selected_last = selected_row_indexes[-1]
+        max_start = max(len(rows) - max_rows, 0)
+        first_visible_row = min(selected_first, max_start)
+        if selected_last >= first_visible_row + max_rows:
+            first_visible_row = min(selected_last - max_rows + 1, max_start)
+        return first_visible_row
+
+    def selected_pending_session_row(self) -> dict[str, Any] | None:
+        rows = self.pending_measurement_rows(self.load_pending_sessions())
+        if not rows:
+            self.selected_index = 0
+            return None
+
+        session_count = self.pending_review_session_count(rows)
+        self.selected_index = min(self.selected_index, session_count - 1)
+        for row in rows:
+            if row["_session_index"] == self.selected_index:
+                return row
+        return None
+
+    def delete_selected_pending_session(self) -> None:
+        row = self.selected_pending_session_row()
+        if row is None:
+            self.status_text = "Não existe uma sessão selecionada para apagar."
+            self.show_send_review()
+            return
+
+        deleted = self.delete_pending_session(str(row["_file_name"]))
+        if deleted:
+            self.status_text = "Sessão apagada."
+            remaining_rows = self.pending_measurement_rows(self.load_pending_sessions())
+            if remaining_rows:
+                session_count = self.pending_review_session_count(remaining_rows)
+                self.selected_index = min(self.selected_index, session_count - 1)
+            else:
+                self.selected_index = 0
+        else:
+            self.status_text = "Não foi possível apagar a sessão selecionada."
+        self.show_send_review()
+
+    def send_selected_pending_session(self) -> None:
+        row = self.selected_pending_session_row()
+        if row is None:
+            self.status_text = "Não existe uma sessão selecionada para enviar."
+            self.show_send_review()
+            return
+
+        sent = self.simulate_send_pending_session(str(row["_file_name"]))
+        if sent:
+            self.status_text = "Sessão enviada."
+            remaining_rows = self.pending_measurement_rows(self.load_pending_sessions())
+            if remaining_rows:
+                session_count = self.pending_review_session_count(remaining_rows)
+                self.selected_index = min(self.selected_index, session_count - 1)
+            else:
+                self.selected_index = 0
+        else:
+            self.status_text = "Não foi possível enviar a sessão selecionada."
+        self.show_send_review()
+
+    def pending_measurement_rows(self, sessions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        session_index = 0
         for session in sessions:
             measurements = session.get("medicoes") or []
             if not isinstance(measurements, list):
                 continue
 
+            file_name = str(
+                session.get("_file_name") or f"{session.get('session_id')}.json"
+            )
             session_date = self.format_session_date(session)
-            mold = self.short_table_text(session.get("molde") or "-", 12)
-            for measurement in measurements:
+            session_operator = session.get("operador") or "-"
+            mold = self.short_table_text(session.get("molde") or "-", 10)
+            session_rows: list[dict[str, Any]] = []
+            for measurement_index, measurement in enumerate(measurements):
                 if not isinstance(measurement, dict):
                     continue
 
-                rows.append(
+                operator = measurement.get("operador") or session_operator
+                session_rows.append(
                     {
+                        "_file_name": file_name,
+                        "_measurement_index": measurement_index,
+                        "_session_index": session_index,
                         "data": session_date,
+                        "operador": self.short_table_text(operator, 12),
                         "molde": mold,
-                        "lado": self.short_table_text(measurement.get("lado") or "-", 5),
+                        "lado": self.short_table_text(measurement.get("lado") or "-", 12),
                         "circuito": self.short_table_text(
                             measurement.get("circuito") or "-", 5
                         ),
@@ -1891,6 +1995,9 @@ class ScreensMixin:
                         ),
                     }
                 )
+            if session_rows:
+                rows.extend(session_rows)
+                session_index += 1
         return rows
 
     @staticmethod
