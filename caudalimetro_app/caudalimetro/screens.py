@@ -42,7 +42,7 @@ class ScreensMixin:
             "Operador",
             self.operator_id,
             show_arrow=True,
-            command=self.select_login_operator,
+            command=None,
             active=self.login_active_field == 0,
         )
 
@@ -97,15 +97,8 @@ class ScreensMixin:
         tk.Button(
             credits_container,
             text="Créditos",
-            command=self.show_credits,
             bg="#303030",
             fg=WHITE,
-            activebackground="#303030",
-            activeforeground=WHITE,
-            relief="flat",
-            bd=0,
-            borderwidth=0,
-            highlightthickness=0,
             font=("Arial", 14),
         ).pack(fill="both", expand=True)
 
@@ -167,10 +160,10 @@ class ScreensMixin:
             arrow_label.pack(side="right", fill="y")
             clickable_widgets.append(arrow_label)
 
-        if command is not None:
-            for widget in clickable_widgets:
-                widget.configure(cursor="hand2")
-                widget.bind("<Button-1>", lambda _event, action=command: action())
+        #if command is not None:
+            #for widget in clickable_widgets:
+                #widget.configure(cursor="hand2")
+                #widget.bind("<Button-1>", lambda _event, action=command: action())
 
         return value_label
 
