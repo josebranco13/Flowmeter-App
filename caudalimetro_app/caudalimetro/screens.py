@@ -1371,7 +1371,7 @@ class ScreensMixin:
         ).pack(fill="both", expand=True)
         tk.Label(
             form,
-            text="L/min",
+            text="litros/min",
             bg=WHITE,
             fg=PANEL_FG,
             font=("Arial", 15),
@@ -1523,7 +1523,7 @@ class ScreensMixin:
                 self.field_value_labels["selected_result_value"] = value_label
             tk.Label(
                 rows,
-                text="L/min",
+                text="litros/min",
                 bg=WHITE,
                 fg=PANEL_FG,
                 font=("Arial", 20),
