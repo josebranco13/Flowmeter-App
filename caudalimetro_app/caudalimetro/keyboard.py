@@ -40,13 +40,15 @@ class KeyboardMixin:
             self.move(1)
             return
 
-        if (
-            self.screen == "LOGIN"
-            and self.login_active_field == 0
-            and char
-            and char.isalnum()
-        ):
-            self.add_char(char.upper())
+        if self.screen == "LOGIN" and char:
+            if (
+                char.isdigit()
+                and self.login_active_field == 1
+                and self.operator_id
+                and self.operator_id in self.operator_options
+                and not self.operator_list_open
+            ):
+                self.add_char(char)
             return
 
         if self.screen == "ADMIN_ADD_OPERATOR" and char and char.isalnum():
@@ -68,13 +70,18 @@ class KeyboardMixin:
     def move(self, delta: int) -> None:
         if self.screen == "LOGIN":
             if self.operator_list_open:
+                status_was_visible = bool(self.status_text)
+                self.status_text = ""
                 self.refresh_operator_options()
                 if self.operator_options:
                     self.operator_selected_index = (
                         self.operator_selected_index + delta
                     ) % len(self.operator_options)
                 visible_options = self.visible_operator_options()
-                if self.update_operator_options(visible_options):
+                if (
+                    not status_was_visible
+                    and self.update_operator_options(visible_options)
+                ):
                     return
 
                 self.show_login()
@@ -158,12 +165,15 @@ class KeyboardMixin:
     def add_char(self, char: str) -> None:
         if self.screen == "LOGIN":
             if self.login_active_field == 0:
-                was_list_open = self.operator_list_open
-                self.operator_list_open = False
-                self.operator_id = (self.operator_id + char.upper())[:20]
-                if was_list_open or not self.update_field_value("operator_id", self.operator_id):
-                    self.show_login()
+                return
             else:
+                if (
+                    not self.operator_id
+                    or self.operator_id not in self.operator_options
+                    or self.operator_list_open
+                    or not char.isdigit()
+                ):
+                    return
                 self.pin = (self.pin + char)[:8]
                 if not self.update_field_value("pin", "●" * len(self.pin)):
                     self.show_login()
@@ -197,12 +207,14 @@ class KeyboardMixin:
 
     def delete_one(self) -> None:
         if self.screen == "LOGIN":
-            if self.login_active_field == 0:
-                was_list_open = self.operator_list_open
+            if self.operator_list_open:
                 self.operator_list_open = False
-                self.operator_id = self.operator_id[:-1]
-                if was_list_open or not self.update_field_value("operator_id", self.operator_id):
-                    self.show_login()
+                self.login_active_field = 1 if self.operator_id else 0
+                self.show_login()
+                return
+
+            if self.login_active_field == 0:
+                return
             else:
                 self.pin = self.pin[:-1]
                 if not self.update_field_value("pin", "●" * len(self.pin)):
@@ -352,7 +364,10 @@ class KeyboardMixin:
             return
 
         if self.operator_list_open:
-            self.operator_id = self.operator_options[self.operator_selected_index]
+            selected_operator = self.operator_options[self.operator_selected_index]
+            if selected_operator != self.operator_id:
+                self.pin = ""
+            self.operator_id = selected_operator
             self.operator_list_open = False
             self.login_active_field = 1
             self.status_text = ""
