@@ -21,33 +21,36 @@ class ScreensMixin:
         content = tk.Frame(root, bg=WHITE)
         content.pack(fill="both", expand=True)
         content.grid_columnconfigure(0, weight=1)
-        content.grid_rowconfigure(0, weight=1)
-        content.grid_rowconfigure(3, weight=2)
+        content.grid_rowconfigure(1, weight=1)
+
+        tk.Label(
+            content,
+            text="Medição de Caudais de Circuitos de Moldes",
+            bg=WHITE,
+            fg=PANEL_FG,
+            font=("Arial", 18, "bold"),
+        ).grid(row=0, column=0, sticky="nw", padx=20, pady=(20, 30))
 
         form = tk.Frame(content, bg=WHITE)
         form.grid(row=1, column=0)
 
+        op_container = tk.Frame(form, bg=WHITE)
+        op_container.pack()
         self.field_value_labels["operator_id"] = self.login_field_row(
-            form,
+            op_container,
             0,
             "Operador",
             self.operator_id,
             show_arrow=True,
             command=self.select_login_operator,
-        )
-        self.field_value_labels["pin"] = self.login_field_row(
-            form,
-            1,
-            "PIN",
-            "●" * len(self.pin),
-            show_arrow=False,
+            active=self.login_active_field == 0,
         )
 
         if self.operator_list_open:
             visible_options = self.visible_operator_options()
             self.operator_visible_indices = [index for index, _ in visible_options]
             dropdown = tk.Frame(form, bg=WHITE)
-            dropdown.grid(row=2, column=1, sticky="ew", pady=(8, 0))
+            dropdown.pack(pady=(2, 8))
             for index, operator in visible_options:
                 label = tk.Label(dropdown, text=operator, pady=8, padx=10, anchor="w")
                 self.style_option_label(label, index == self.operator_selected_index)
@@ -56,6 +59,17 @@ class ScreensMixin:
         else:
             self.operator_visible_indices = []
 
+        pin_container = tk.Frame(form, bg=WHITE)
+        pin_container.pack()
+        self.field_value_labels["pin"] = self.login_field_row(
+            pin_container,
+            1,
+            "PIN",
+            "●" * len(self.pin),
+            show_arrow=False,
+            active=self.login_active_field == 1,
+        )
+
         if self.status_text:
             tk.Label(
                 content,
@@ -63,9 +77,39 @@ class ScreensMixin:
                 bg=WHITE,
                 fg=RED,
                 font=("Arial", 12, "bold"),
-            ).grid(row=2, column=0, pady=14)
+            ).grid(row=2, column=0, pady=14, sticky="n")
 
-        self.build_login_footer(root)
+        action_area = tk.Frame(root, bg=WHITE)
+        action_area.pack(side="bottom", fill="x")
+
+        credits_active = self.login_active_field == 2
+        credits_container = tk.Frame(
+            action_area,
+            width=310,
+            height=48,
+            highlightbackground="#087cff" if credits_active else WHITE,
+            highlightcolor="#087cff",
+            highlightthickness=3 if credits_active else 0,
+        )
+        credits_container.pack(pady=(0, 5))
+        credits_container.pack_propagate(False)
+
+        tk.Button(
+            credits_container,
+            text="Créditos",
+            command=self.show_credits,
+            bg="#303030",
+            fg=WHITE,
+            activebackground="#303030",
+            activeforeground=WHITE,
+            relief="flat",
+            bd=0,
+            borderwidth=0,
+            highlightthickness=0,
+            font=("Arial", 14),
+        ).pack(fill="both", expand=True)
+
+        self.build_login_footer(action_area)
 
     def login_field_row(
         self,
@@ -75,19 +119,28 @@ class ScreensMixin:
         value: str,
         show_arrow: bool,
         command=None,
+        active: bool = False,
     ) -> tk.Label:
         tk.Label(
             parent,
             text=label_text,
             bg=WHITE,
             fg=PANEL_FG,
-            font=("Arial", 22, "bold"),
+            font=("Arial", 18, "bold"),
+            width=8,
             anchor="e",
-            width=11,
-        ).grid(row=row, column=0, sticky="e", padx=(0, 16), pady=6)
+        ).pack(side="left", padx=(0, 10))
 
-        field = tk.Frame(parent, bg=GREY, width=310, height=54)
-        field.grid(row=row, column=1, sticky="w", pady=6)
+        field = tk.Frame(
+            parent,
+            bg=GREY,
+            width=310,
+            height=54,
+            highlightbackground="#087cff" if active else WHITE,
+            highlightcolor="#087cff" if active else WHITE,
+            highlightthickness=3 if active else 0,
+        )
+        field.pack(side="left", pady=8)
         field.pack_propagate(False)
 
         value_label = tk.Label(
@@ -120,6 +173,23 @@ class ScreensMixin:
                 widget.bind("<Button-1>", lambda _event, action=command: action())
 
         return value_label
+
+    def show_credits(self) -> None:
+        self.screen = "CREDITS"
+        self.clear()
+
+        root = tk.Frame(self, bg=WHITE)
+        root.pack(fill="both", expand=True)
+
+        tk.Label(
+            root,
+            text="Créditos",
+            bg=WHITE,
+            fg=PANEL_FG,
+            font=("Arial", 18, "bold"),
+        ).pack(side="top", anchor="nw", padx=20, pady=20)
+
+        self.build_login_footer(root)
 
     def build_login_footer(self, parent: tk.Widget) -> None:
         footer = tk.Frame(parent, bg=WHITE)

@@ -87,7 +87,7 @@ class KeyboardMixin:
                 self.show_login()
                 return
 
-            self.login_active_field = (self.login_active_field + delta) % 2
+            self.login_active_field = (self.login_active_field + delta) % 3
             self.operator_list_open = False
             self.show_login()
         elif self.screen == "MENU":
@@ -290,7 +290,10 @@ class KeyboardMixin:
 
     def select(self) -> None:
         if self.screen == "LOGIN":
-            self.select_login_operator()
+            if self.login_active_field == 0:
+                self.select_login_operator()
+            elif self.login_active_field == 2:
+                self.show_credits()
             return
 
         if self.screen == "MOLD_SIDE":
@@ -385,6 +388,10 @@ class KeyboardMixin:
 
     def confirm(self) -> None:
         if self.screen == "LOGIN":
+            if self.login_active_field == 2:
+                self.show_credits()
+                return
+
             self.operator_list_open = False
             self.operator_id = self.normalize_operator_name(self.operator_id)
             if not self.operator_id or not self.pin:
@@ -604,6 +611,8 @@ class KeyboardMixin:
             self.cancel_admin_add_operator()
         elif self.screen == "ADMIN_REMOVE_CONFIRM":
             self.cancel_admin_operator_removal()
+        elif self.screen == "CREDITS":
+            self.show_login()
         elif self.screen in ("SUMMARY", "SEND"):
             self.show_menu()
 
