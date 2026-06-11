@@ -33,6 +33,7 @@ class ScreensMixin:
             "Operador",
             self.operator_id,
             show_arrow=True,
+            command=self.select_login_operator,
         )
         self.field_value_labels["pin"] = self.login_field_row(
             form,
@@ -73,6 +74,7 @@ class ScreensMixin:
         label_text: str,
         value: str,
         show_arrow: bool,
+        command=None,
     ) -> tk.Label:
         tk.Label(
             parent,
@@ -98,16 +100,24 @@ class ScreensMixin:
             padx=10,
         )
         value_label.pack(side="left", fill="both", expand=True)
+        clickable_widgets = [field, value_label]
 
         if show_arrow:
-            tk.Label(
+            arrow_label = tk.Label(
                 field,
                 text="▼",
                 bg=GREY,
                 fg=PANEL_FG,
                 font=("Arial", 22, "bold"),
                 width=2,
-            ).pack(side="right", fill="y")
+            )
+            arrow_label.pack(side="right", fill="y")
+            clickable_widgets.append(arrow_label)
+
+        if command is not None:
+            for widget in clickable_widgets:
+                widget.configure(cursor="hand2")
+                widget.bind("<Button-1>", lambda _event, action=command: action())
 
         return value_label
 

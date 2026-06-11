@@ -343,12 +343,9 @@ class KeyboardMixin:
         self.show_mold_side()
 
     def select_login_operator(self) -> None:
-        if self.login_active_field != 0:
-            self.confirm()
-            return
-
         self.refresh_operator_options()
         if not self.operator_options:
+            self.login_active_field = 0
             self.operator_list_open = False
             self.status_text = "Não existem operadores configurados."
             self.show_login()
@@ -366,6 +363,7 @@ class KeyboardMixin:
             self.operator_selected_index = self.operator_options.index(self.operator_id)
         else:
             self.operator_selected_index = 0
+        self.login_active_field = 0
         self.operator_list_open = True
         self.status_text = ""
         self.show_login()
