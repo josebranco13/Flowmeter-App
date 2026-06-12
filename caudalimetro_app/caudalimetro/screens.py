@@ -1474,7 +1474,7 @@ class ScreensMixin:
         footer_area.pack(side="bottom", fill="x")
         tk.Label(
             footer_area,
-            text="Limpar circuito anterior",
+            text="Limpar circuito",
             bg=WHITE,
             fg=RED,
             font=("Arial", 13, "bold"),
