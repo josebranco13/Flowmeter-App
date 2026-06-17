@@ -959,7 +959,7 @@ class ScreensMixin:
 
     def circuit_count_badge_text(self) -> str:
         count = self.expected_count_for_current_side()
-        return f"{count}circuitos" if count else ""
+        return f"{count} circuitos" if count else ""
 
     def pressure_badge_text(self) -> str:
         if self.session is None or not self.session.pressao_entrada_bar:
@@ -998,8 +998,8 @@ class ScreensMixin:
     def circuit_progress_title(self) -> str:
         total = self.expected_count_for_current_side()
         if self.current_circuit and total:
-            return f"Medir circuitos ({self.current_circuit}/{total})"
-        return "Medir circuitos"
+            return f"Medição de circuitos ({self.current_circuit}/{total})"
+        return "Medição de circuitos"
 
     def measurement_badge_text(self) -> str:
         return self.setup_badge_text(include_circuit_count=True, include_pressure=True)
@@ -1089,29 +1089,29 @@ class ScreensMixin:
         content.pack(fill="both", expand=True)
         content.grid_columnconfigure(0, weight=1)
         content.grid_rowconfigure(0, weight=1)
-        content.grid_rowconfigure(2, weight=2)
+        content.grid_rowconfigure(2, weight=1)
 
         row = tk.Frame(content, bg=WHITE)
-        row.grid(row=1, column=0, sticky="w", padx=8)
+        row.grid(row=1, column=0)
 
         tk.Label(
             row,
             text="Pressão à entrada:",
             bg=WHITE,
             fg=PANEL_FG,
-            font=("Arial", 14, "bold"),
+            font=("Arial", 22, "bold"),
         ).pack(side="left")
-        field = tk.Frame(row, bg=GREY, width=90, height=32)
-        field.pack(side="left", padx=(6, 4))
+        field = tk.Frame(row, bg=GREY, width=150, height=54)
+        field.pack(side="left", padx=(14, 10))
         field.pack_propagate(False)
         value_label = tk.Label(
             field,
             text=self.input_value or " ",
             bg=GREY,
             fg=PANEL_FG,
-            font=("Arial", 14),
+            font=("Arial", 22),
             anchor="w",
-            padx=8,
+            padx=12,
         )
         value_label.pack(fill="both", expand=True)
         self.field_value_labels["input_value"] = value_label
@@ -1120,7 +1120,7 @@ class ScreensMixin:
             text="bar",
             bg=WHITE,
             fg=PANEL_FG,
-            font=("Arial", 14),
+            font=("Arial", 22),
         ).pack(side="left")
 
         if self.status_text:
@@ -1162,27 +1162,27 @@ class ScreensMixin:
         content.pack(fill="both", expand=True)
         content.grid_columnconfigure(0, weight=1)
         content.grid_rowconfigure(0, weight=1)
-        content.grid_rowconfigure(2, weight=2)
+        content.grid_rowconfigure(2, weight=1)
 
         row = tk.Frame(content, bg=WHITE)
-        row.grid(row=1, column=0, sticky="w", padx=32)
+        row.grid(row=1, column=0)
 
         tk.Label(
             row,
             text="Quantidade de circuitos :",
             bg=WHITE,
             fg=PANEL_FG,
-            font=("Arial", 12, "bold"),
+            font=("Arial", 22, "bold"),
         ).pack(side="left")
-        field = tk.Frame(row, bg=GREY, width=70, height=26)
-        field.pack(side="left", padx=(6, 0))
+        field = tk.Frame(row, bg=GREY, width=140, height=54)
+        field.pack(side="left", padx=(14, 0))
         field.pack_propagate(False)
         value_label = tk.Label(
             field,
             text=self.input_value or " ",
             bg=GREY,
             fg=PANEL_FG,
-            font=("Arial", 12),
+            font=("Arial", 22),
             anchor="center",
         )
         value_label.pack(fill="both", expand=True)
@@ -1260,27 +1260,27 @@ class ScreensMixin:
         content.pack(fill="both", expand=True)
         content.grid_columnconfigure(0, weight=1)
         content.grid_rowconfigure(0, weight=1)
-        content.grid_rowconfigure(2, weight=2)
+        content.grid_rowconfigure(2, weight=1)
 
         form = tk.Frame(content, bg=WHITE)
-        form.grid(row=1, column=0, sticky="w", padx=4)
+        form.grid(row=1, column=0)
 
         assert self.session is not None
         tk.Label(
             form,
-            text=f"circuito {self.current_circuit}",
+            text=f"Circuito {self.current_circuit}",
             bg=WHITE,
             fg=PANEL_FG,
-            font=("Arial", 14),
-        ).grid(row=0, column=0, columnspan=6, sticky="w", pady=(0, 18))
+            font=("Arial", 24, "bold"),
+        ).grid(row=0, column=0, columnspan=6, pady=(0, 26))
         tk.Label(
             form,
             text="Caudal atual:",
             bg=WHITE,
             fg=PANEL_FG,
-            font=("Arial", 12),
-        ).grid(row=1, column=0, sticky="w", pady=(0, 24))
-        current = self.measure_value_box(form, 1, 1, 84, "")
+            font=("Arial", 20),
+        ).grid(row=1, column=0, sticky="e", padx=(0, 12), pady=(0, 30))
+        current = self.measure_value_box(form, 1, 1, 150, "")
         self.measure_labels["current"] = current
 
         labels = [("Min:", "min"), ("Med:", "avg"), ("Max:", "max")]
@@ -1291,9 +1291,9 @@ class ScreensMixin:
                 text=text,
                 bg=WHITE,
                 fg=PANEL_FG,
-                font=("Arial", 12),
-            ).grid(row=2, column=col, sticky="w", padx=(0, 2))
-            self.measure_labels[key] = self.measure_value_box(form, 2, col + 1, 54, "")
+                font=("Arial", 20),
+            ).grid(row=2, column=col, sticky="e", padx=(0, 10))
+            self.measure_labels[key] = self.measure_value_box(form, 2, col + 1, 96, "")
 
         self.build_simple_footer(
             root,
@@ -1322,15 +1322,17 @@ class ScreensMixin:
         width: int,
         value: str,
     ) -> tk.Label:
-        box = tk.Frame(parent, bg=GREY, width=width, height=24)
-        box.grid(row=row, column=column, sticky="w", padx=(0, 12), pady=(0, 24))
+        height = 42 if width >= 90 else 24
+        font_size = 20 if width >= 90 else 12
+        box = tk.Frame(parent, bg=GREY, width=width, height=height)
+        box.grid(row=row, column=column, sticky="w", padx=(0, 28), pady=(0, 30))
         box.pack_propagate(False)
         label = tk.Label(
             box,
             text=value or " ",
             bg=GREY,
             fg=PANEL_FG,
-            font=("Arial", 12),
+            font=("Arial", font_size),
             anchor="center",
         )
         label.pack(fill="both", expand=True)
@@ -1349,33 +1351,34 @@ class ScreensMixin:
         content = tk.Frame(root, bg=WHITE)
         content.pack(fill="both", expand=True)
         content.grid_columnconfigure(0, weight=1)
+        content.grid_rowconfigure(0, weight=1)
         content.grid_rowconfigure(2, weight=1)
 
         form = tk.Frame(content, bg=WHITE)
-        form.grid(row=0, column=0, sticky="w", padx=4, pady=(8, 0))
+        form.grid(row=1, column=0)
         tk.Label(
             form,
             text=self.circuit_progress_title(),
             bg=WHITE,
             fg=PANEL_FG,
-            font=("Arial", 12),
-        ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
+            font=("Arial", 24, "bold"),
+        ).grid(row=0, column=0, columnspan=2, pady=(0, 24))
         tk.Label(
             form,
             text="circuito nº",
             bg=WHITE,
             fg=PANEL_FG,
-            font=("Arial", 11),
-        ).grid(row=1, column=0, sticky="w")
-        field = tk.Frame(form, bg=GREY, width=84, height=24)
-        field.grid(row=1, column=1, sticky="w", padx=(8, 0))
+            font=("Arial", 22),
+        ).grid(row=1, column=0, sticky="e", padx=(0, 14))
+        field = tk.Frame(form, bg=GREY, width=160, height=54)
+        field.grid(row=1, column=1, sticky="w")
         field.pack_propagate(False)
         tk.Label(
             field,
             text=str(self.current_circuit),
             bg=GREY,
             fg="#777777",
-            font=("Arial", 11),
+            font=("Arial", 22),
         ).pack(fill="both", expand=True)
         tk.Button(
             form,
@@ -1389,10 +1392,10 @@ class ScreensMixin:
             bd=0,
             borderwidth=0,
             highlightthickness=0,
-            font=("Arial", 9),
-            padx=16,
-            pady=5,
-        ).grid(row=2, column=0, columnspan=2, pady=(10, 0))
+            font=("Arial", 18),
+            padx=34,
+            pady=12,
+        ).grid(row=2, column=0, columnspan=2, pady=(26, 0))
 
         self.build_simple_footer(
             root,
@@ -1419,25 +1422,26 @@ class ScreensMixin:
         content = tk.Frame(root, bg=WHITE)
         content.pack(fill="both", expand=True)
         content.grid_columnconfigure(0, weight=1)
+        content.grid_rowconfigure(0, weight=1)
         content.grid_rowconfigure(1, weight=1)
 
         form = tk.Frame(content, bg=WHITE)
-        form.grid(row=0, column=0, sticky="w", padx=6, pady=(8, 0))
+        form.grid(row=0, column=0)
         tk.Label(
             form,
             text=self.circuit_progress_title(),
             bg=WHITE,
             fg=PANEL_FG,
-            font=("Arial", 18),
-        ).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 8))
+            font=("Arial", 24, "bold"),
+        ).grid(row=0, column=0, columnspan=3, pady=(0, 24))
         tk.Label(
             form,
-            text="circuito nº",
+            text="Circuito nº",
             bg=WHITE,
             fg=PANEL_FG,
-            font=("Arial", 13),
-        ).grid(row=1, column=0, sticky="e", pady=3)
-        self.result_box(form, 1, 1, 120, str(self.current_circuit), font_size=16)
+            font=("Arial", 22),
+        ).grid(row=1, column=0, sticky="e", padx=(0, 14), pady=8)
+        self.result_box(form, 1, 1, 180, str(self.current_circuit), font_size=22)
 
         flow_value = ""
         flow_highlighted = False
@@ -1453,33 +1457,33 @@ class ScreensMixin:
             text="caudal:",
             bg=WHITE,
             fg=PANEL_FG,
-            font=("Arial", 15),
-        ).grid(row=2, column=0, sticky="e", pady=3)
+            font=("Arial", 22, "bold"),
+        ).grid(row=2, column=0, sticky="e", padx=(0, 14), pady=8)
         box = tk.Frame(
             form,
             bg=flow_bg,
-            width=120,
-            height=30,
+            width=180,
+            height=54,
             highlightbackground="#087cff" if flow_active else WHITE,
             highlightcolor="#087cff" if flow_active else WHITE,
             highlightthickness=2,
         )
-        box.grid(row=2, column=1, sticky="w", padx=(8, 4), pady=3)
+        box.grid(row=2, column=1, sticky="w", pady=8)
         box.pack_propagate(False)
         tk.Label(
             box,
             text=flow_value,
             bg=flow_bg,
             fg="#777777",
-            font=("Arial", 15),
+            font=("Arial", 22),
         ).pack(fill="both", expand=True)
         tk.Label(
             form,
             text="litros/min",
             bg=WHITE,
             fg=PANEL_FG,
-            font=("Arial", 15),
-        ).grid(row=2, column=2, sticky="w", pady=3)
+            font=("Arial", 22, "bold"),
+        ).grid(row=2, column=2, sticky="w", padx=(14, 0), pady=8)
 
         highlight_active = self.selected_index == 1
         highlight_action = tk.Frame(
@@ -1488,7 +1492,7 @@ class ScreensMixin:
             padx=3,
             pady=3,
         )
-        highlight_action.grid(row=3, column=0, columnspan=3, pady=(12, 0))
+        highlight_action.grid(row=3, column=0, columnspan=3, pady=(24, 0))
         tk.Button(
             highlight_action,
             text="Destacar",
@@ -1501,9 +1505,9 @@ class ScreensMixin:
             bd=0,
             borderwidth=0,
             highlightthickness=0,
-            font=("Arial", 11),
-            padx=30,
-            pady=8,
+            font=("Arial", 18),
+            padx=44,
+            pady=12,
         ).pack()
 
         next_text = (
@@ -1549,12 +1553,18 @@ class ScreensMixin:
             parent,
             bg=bg,
             width=width,
-            height=34,
+            height=54 if font_size >= 20 else 34,
             highlightbackground=highlight_bg,
             highlightcolor=highlight_bg,
             highlightthickness=highlight_thickness,
         )
-        box.grid(row=row, column=column, sticky="w", padx=(8, 4), pady=3)
+        box.grid(
+            row=row,
+            column=column,
+            sticky="w",
+            padx=(0, 4),
+            pady=8 if font_size >= 20 else 3,
+        )
         box.pack_propagate(False)
         label = tk.Label(
             box,
@@ -1580,20 +1590,24 @@ class ScreensMixin:
         content = tk.Frame(root, bg=WHITE)
         content.pack(fill="both", expand=True)
         content.grid_columnconfigure(0, weight=1)
+        content.grid_rowconfigure(0, weight=1)
         content.grid_rowconfigure(1, weight=1)
+        content.grid_rowconfigure(2, weight=1)
 
         side = self.current_side or (self.session.lado_molde if self.session else "")
+        results_content = tk.Frame(content, bg=WHITE)
+        results_content.grid(row=1, column=0)
         tk.Label(
-            content,
+            results_content,
             text=f"Circuitos do {side}",
             bg=WHITE,
             fg=PANEL_FG,
-            font=("Arial", 22),
-        ).grid(row=0, column=0, sticky="w", padx=4, pady=(0, 4))
+            font=("Arial", 28, "bold"),
+        ).pack(pady=(0, 26))
 
         records = sorted(self.measurements_for_side(side), key=lambda item: item["circuito"])
-        rows = tk.Frame(content, bg=WHITE)
-        rows.grid(row=1, column=0, sticky="nw", padx=96)
+        rows = tk.Frame(results_content, bg=WHITE)
+        rows.pack()
         for index, item in enumerate(records[:6]):
             circuit = item.get("circuito", index + 1)
             editing = self.result_editing and index == self.selected_result_index
@@ -1604,11 +1618,11 @@ class ScreensMixin:
             )
             tk.Label(
                 rows,
-                text=f"circuito {circuit}",
+                text=f"Circuito {circuit}",
                 bg=WHITE,
                 fg=PANEL_FG,
-                font=("Arial", 20),
-            ).grid(row=index, column=0, sticky="e", pady=3)
+                font=("Arial", 24),
+            ).grid(row=index, column=0, sticky="e", padx=(0, 14), pady=6)
             highlighted = bool(item.get("destacado"))
             selected = index == self.selected_result_index
             bg = RED if highlighted else GREY
@@ -1616,9 +1630,9 @@ class ScreensMixin:
                 rows,
                 index,
                 1,
-                184,
+                220,
                 value,
-                font_size=18,
+                font_size=24,
                 bg=bg,
                 highlight_bg="#087cff" if selected else bg,
                 highlight_thickness=2 if selected else 0,
@@ -1630,8 +1644,8 @@ class ScreensMixin:
                 text="litros/min",
                 bg=WHITE,
                 fg=PANEL_FG,
-                font=("Arial", 20),
-            ).grid(row=index, column=2, sticky="w", pady=3)
+                font=("Arial", 24),
+            ).grid(row=index, column=2, sticky="w", padx=(14, 0), pady=6)
 
         if len(records) > 6:
             scroll = tk.Frame(content, bg="#d7d7d7", width=26, height=220)
@@ -1646,7 +1660,7 @@ class ScreensMixin:
                 bg=WHITE,
                 fg=RED,
                 font=("Arial", 13, "bold"),
-            ).grid(row=2, column=0, sticky="w", padx=96, pady=(12, 0))
+            ).grid(row=2, column=0, pady=(12, 0))
 
         self.build_simple_footer(
             root,
