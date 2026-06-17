@@ -157,6 +157,19 @@ class KeyboardMixin:
         if not self.diameter_options:
             return
 
+        if len(self.diameter_options) == 5:
+            vertical_order = [0, 3, 1, 4, 2]
+            try:
+                order_index = vertical_order.index(self.selected_index)
+            except ValueError:
+                order_index = 0
+
+            step = 1 if delta > 0 else -1
+            self.selected_index = vertical_order[
+                (order_index + step) % len(vertical_order)
+            ]
+            return
+
         self.selected_index = (self.selected_index + delta) % len(self.diameter_options)
 
     def update_input_value_field(self) -> bool:

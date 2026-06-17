@@ -944,17 +944,18 @@ class ScreensMixin:
     def diameter_badge_text(self) -> str:
         if self.session is None or not self.session.diametro_mm:
             return ""
+        return self.diameter_display_text(self.session.diametro_mm)
+
+    @staticmethod
+    def diameter_display_text(diameter: int) -> str:
         inch_labels = {
-            6: '1/4"',
-            8: '5/16"',
-            10: '3/8"',
-            12: '1/2"',
-            14: '9/16"',
-            16: '5/8"',
-            20: '3/4"',
-            25: '1"',
+            3: "1/8",
+            6: "1/4",
+            10: "3/8",
+            12: "1/2",
+            20: "3/4",
         }
-        return inch_labels.get(self.session.diametro_mm, f"{self.session.diametro_mm} mm")
+        return inch_labels.get(diameter, f"{diameter} mm")
 
     def circuit_count_badge_text(self) -> str:
         count = self.expected_count_for_current_side()
@@ -984,7 +985,15 @@ class ScreensMixin:
         return "\n".join(line for line in lines if line)
 
     def diameter_context_badge_text(self) -> str:
-        return self.setup_badge_text()
+        if self.session is None:
+            return ""
+
+        lines = []
+        if self.session.lado_molde:
+            lines.append(self.session.lado_molde)
+        if self.session.molde:
+            lines.append(f"Molde {self.session.molde}")
+        return "\n".join(lines)
 
     def circuit_progress_title(self) -> str:
         total = self.expected_count_for_current_side()
@@ -1020,37 +1029,47 @@ class ScreensMixin:
 
     def show_diameter(self) -> None:
         self.screen = "DIAMETER"
-        panel = self.build_base("Diâmetro do circuito", "4/8")
+        if self.diameter_options:
+            self.selected_index = min(self.selected_index, len(self.diameter_options) - 1)
+        panel = self.build_base("", "")
+        panel.configure(bg=WHITE)
+        content = tk.Frame(panel, bg=WHITE)
+        content.pack(expand=True)
         tk.Label(
-            panel,
-            text="Selecione o diâmetro",
-            bg=PANEL_BG,
+            content,
+            text="Selecione o diâmetro do circuito",
+            bg=WHITE,
             fg=PANEL_FG,
             font=("Arial", 18, "bold"),
-        ).pack(pady=(24, 12))
+        ).pack(pady=(0, 22))
 
-        grid = tk.Frame(panel, bg=PANEL_BG)
-        grid.pack(pady=4)
+        grid = tk.Frame(content, bg=WHITE)
+        grid.pack()
+        top_row = tk.Frame(grid, bg=WHITE)
+        top_row.pack()
+        bottom_row = tk.Frame(grid, bg=WHITE)
+        bottom_row.pack(pady=(8, 0))
         self.diameter_labels = []
         for i, diameter in enumerate(self.diameter_options):
             active = i == self.selected_index
+            row_frame = top_row if i < 3 else bottom_row
             label = tk.Label(
-                grid,
-                text=f"{diameter} mm",
+                row_frame,
+                text=self.diameter_display_text(diameter),
                 width=10,
                 pady=14,
             )
             self.style_diameter_label(label, active)
-            label.grid(row=i % 2, column=i // 2, padx=7, pady=7)
+            label.pack(side="left", padx=7, pady=7)
             self.diameter_labels.append(label)
 
         tk.Label(
-            panel,
+            content,
             text="Use ↑/↓ para alterar a opção e confirme.",
-            bg=PANEL_BG,
+            bg=WHITE,
             fg="#555555",
             font=("Arial", 11),
-        ).pack(pady=12)
+        ).pack(pady=(18, 0))
 
         badge_text = self.diameter_context_badge_text()
         if badge_text:
@@ -1209,7 +1228,7 @@ class ScreensMixin:
         tk.Label(
             panel,
             text=(
-                f"Molde {self.session.molde} | Ø {self.session.diametro_mm} mm | "
+                f"Molde {self.session.molde} | Ø {self.diameter_badge_text()} | "
                 f"{self.session.pressao_entrada_bar:.2f} bar"
             ),
             bg=PANEL_BG,
