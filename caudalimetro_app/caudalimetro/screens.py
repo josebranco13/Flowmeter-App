@@ -627,38 +627,38 @@ class ScreensMixin:
         content.pack(fill="both", expand=True)
         content.grid_columnconfigure(0, weight=1)
         content.grid_rowconfigure(0, weight=1)
-        content.grid_rowconfigure(2, weight=2)
+        content.grid_rowconfigure(2, weight=1)
 
         row = tk.Frame(content, bg=WHITE)
-        row.grid(row=1, column=0, sticky="w", padx=8)
+        row.grid(row=1, column=0)
 
         tk.Label(
             row,
             text="Nº do molde:",
             bg=WHITE,
             fg=PANEL_FG,
-            font=("Arial", 14, "bold"),
+            font=("Arial", 22, "bold"),
         ).pack(side="left")
         tk.Label(
             row,
             text="AHA",
             bg=WHITE,
             fg=PANEL_FG,
-            font=("Arial", 14),
-            padx=5,
+            font=("Arial", 22),
+            padx=10,
         ).pack(side="left")
 
-        field = tk.Frame(row, bg=GREY, width=182, height=32)
-        field.pack(side="left", padx=(6, 0))
+        field = tk.Frame(row, bg=GREY, width=300, height=54)
+        field.pack(side="left", padx=(12, 0))
         field.pack_propagate(False)
         value_label = tk.Label(
             field,
             text=self.input_value or " ",
             bg=GREY,
             fg=PANEL_FG,
-            font=("Arial", 14),
+            font=("Arial", 22),
             anchor="w",
-            padx=8,
+            padx=12,
         )
         value_label.pack(fill="both", expand=True)
         self.field_value_labels["input_value"] = value_label
@@ -728,7 +728,7 @@ class ScreensMixin:
         content.pack(fill="both", expand=True)
         content.grid_columnconfigure(0, weight=1)
         content.grid_rowconfigure(0, weight=1)
-        content.grid_rowconfigure(2, weight=2)
+        content.grid_rowconfigure(2, weight=1)
 
         form = tk.Frame(content, bg=WHITE)
         form.grid(row=1, column=0)
@@ -738,37 +738,37 @@ class ScreensMixin:
             text="Lado do Molde:",
             bg=WHITE,
             fg=PANEL_FG,
-            font=("Arial", 15, "bold"),
-        ).grid(row=0, column=0, sticky="e", padx=(0, 8), pady=5)
+            font=("Arial", 18, "bold"),
+        ).grid(row=0, column=0, sticky="e", padx=(0, 12), pady=8)
 
         side_value = self.session.lado_molde if self.session else ""
         side_active = self.selected_index == 0
         side_field = tk.Frame(
             form,
             bg=GREY,
-            width=230,
-            height=36,
+            width=330,
+            height=56,
             highlightbackground="#087cff" if side_active else WHITE,
             highlightcolor="#087cff" if side_active else WHITE,
             highlightthickness=3,
         )
-        side_field.grid(row=0, column=1, sticky="w", pady=5)
+        side_field.grid(row=0, column=1, sticky="w", pady=8)
         side_field.pack_propagate(False)
         tk.Label(
             side_field,
             text=side_value or " ",
             bg=GREY,
             fg=PANEL_FG,
-            font=("Arial", 14),
+            font=("Arial", 17),
             anchor="w",
-            padx=8,
+            padx=12,
         ).pack(side="left", fill="both", expand=True)
         tk.Label(
             side_field,
             text="▼",
             bg=GREY,
             fg=PANEL_FG,
-            font=("Arial", 21, "bold"),
+            font=("Arial", 26, "bold"),
             width=2,
         ).pack(side="right", fill="y")
 
@@ -786,19 +786,25 @@ class ScreensMixin:
             text="Operador:",
             bg=WHITE,
             fg=PANEL_FG,
-            font=("Arial", 15, "bold"),
-        ).grid(row=2, column=0, sticky="e", padx=(0, 8), pady=(14, 5))
-        tk.Label(
+            font=("Arial", 18, "bold"),
+        ).grid(row=2, column=0, sticky="e", padx=(0, 12), pady=(18, 8))
+        operator_box = tk.Frame(
             form,
+            bg=GREY,
+            width=330,
+            height=56,
+        )
+        operator_box.grid(row=2, column=1, sticky="w", pady=(18, 8))
+        operator_box.pack_propagate(False)
+        tk.Label(
+            operator_box,
             text=self.operator_display_text(),
             bg=GREY,
             fg=PANEL_FG,
-            font=("Arial", 14),
+            font=("Arial", 17),
             anchor="w",
-            width=20,
-            padx=6,
-            pady=4,
-        ).grid(row=2, column=1, sticky="w", pady=(14, 5))
+            padx=12,
+        ).pack(fill="both", expand=True)
 
         operator_active = self.selected_index == 1
         operator_action = tk.Frame(
