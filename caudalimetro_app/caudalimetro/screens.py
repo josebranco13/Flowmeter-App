@@ -29,7 +29,7 @@ class ScreensMixin:
             bg=WHITE,
             fg=PANEL_FG,
             font=("Arial", 18, "bold"),
-        ).grid(row=0, column=0, sticky="nw", padx=20, pady=(20, 30))
+        ).grid(row=0, column=0, sticky="n", pady=(20, 30))
 
         form = tk.Frame(content, bg=WHITE)
         form.grid(row=1, column=0)
@@ -207,7 +207,7 @@ class ScreensMixin:
                 bd=0,
                 borderwidth=0,
                 highlightthickness=0,
-                font=("Arial", 14),
+                font=("Arial", 12),
                 pady=16,
             ).pack(side="left", expand=True, fill="both")
 
@@ -579,19 +579,35 @@ class ScreensMixin:
         self.selected_index = min(self.selected_index, len(self.menu_options) - 1)
         panel = self.build_base(
             "Menu principal",
-            "2/8",
+            "",
             back_text="Logout",
             back_command=self.logout_to_login,
+            center_title=True,
         )
+        panel.configure(bg=WHITE)
+        menu_content = tk.Frame(panel, bg=WHITE)
+        menu_content.pack(expand=True)
+
         tk.Label(
-            panel,
+            menu_content,
             text=f"Operador: {self.operator_id}",
-            bg=PANEL_BG,
+            bg=WHITE,
             fg="#555555",
             font=("Arial", 12),
-        ).pack(pady=(26, 12))
+        ).pack(pady=(0, 12))
         for i, option in enumerate(self.menu_options):
-            self.option_row(panel, option, i == self.selected_index)
+            label = tk.Label(
+                menu_content,
+                text=option,
+                pady=8,
+                padx=10,
+                anchor="center",
+                width=34,
+            )
+            label.option_font_size = 14
+            self.style_option_label(label, i == self.selected_index)
+            label.pack(pady=5)
+            self.option_labels.append(label)
 
     def logout_to_login(self) -> None:
         self.logout()

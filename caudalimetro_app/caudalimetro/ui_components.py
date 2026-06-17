@@ -3,8 +3,6 @@ from __future__ import annotations
 import tkinter as tk
 
 from .config import (
-    APP_BG,
-    BLACK,
     BLUE,
     DARK_PANEL,
     GREEN,
@@ -13,7 +11,6 @@ from .config import (
     PANEL_FG,
     RED,
     WHITE,
-    YELLOW,
 )
 
 
@@ -34,36 +31,41 @@ class UiComponentsMixin:
         select_text: str = "Selecionar",
         select_command=None,
         confirm_command=None,
+        center_title: bool = False,
     ) -> tk.Frame:
         self.clear()
         self.option_labels = []
         self.diameter_labels = []
         self.field_value_labels = {}
-        root = tk.Frame(self, bg=APP_BG)
+        root = tk.Frame(self, bg=WHITE)
         root.pack(fill="both", expand=True)
 
         if title or step:
-            header = tk.Frame(root, bg=APP_BG)
+            header = tk.Frame(root, bg=WHITE)
             header.pack(fill="x", padx=22, pady=(16, 8))
             if title:
-                tk.Label(
+                title_label = tk.Label(
                     header,
                     text=title,
-                    bg=APP_BG,
-                    fg=WHITE,
+                    bg=WHITE,
+                    fg=PANEL_FG,
                     font=("Arial", 22, "bold"),
-                ).pack(side="left")
+                )
+                if center_title:
+                    title_label.pack(anchor="center")
+                else:
+                    title_label.pack(side="left")
             if step:
                 tk.Label(
                     header,
                     text=step,
-                    bg=APP_BG,
-                    fg="#cfd6df",
+                    bg=WHITE,
+                    fg="#777777",
                     font=("Arial", 11),
                 ).pack(side="right")
 
-        body = tk.Frame(root, bg=APP_BG)
-        body.pack(fill="both", expand=True, padx=22, pady=6)
+        body = tk.Frame(root, bg=WHITE)
+        body.pack(fill="both", expand=True)
 
         panel = tk.Frame(body, bg=PANEL_BG, bd=0, highlightthickness=0)
         panel.pack(side="left", fill="both", expand=True)
@@ -72,10 +74,10 @@ class UiComponentsMixin:
             tk.Label(
                 root,
                 text=self.status_text,
-                bg=APP_BG,
-                fg=YELLOW,
+                bg=WHITE,
+                fg="#c48b00",
                 font=("Arial", 12, "bold"),
-            ).pack(fill="x", padx=22, pady=(0, 4))
+            ).pack(fill="x", pady=(0, 4))
 
         self.build_footer(
             root,
@@ -143,33 +145,35 @@ class UiComponentsMixin:
         select_command=None,
         confirm_command=None,
     ) -> None:
-        footer = tk.Frame(parent, bg=APP_BG)
-        footer.pack(fill="x", padx=22, pady=(4, 14))
+        footer = tk.Frame(parent, bg=WHITE)
+        footer.pack(side="bottom", fill="x")
 
         back_command = back_command or self.go_back
         delete_command = delete_command or self.delete_one
         select_command = select_command or self.select
         confirm_command = confirm_command or self.confirm
         buttons = [
-            (back_text, BLACK, back_command),
-            (delete_text, RED, delete_command),
-            (select_text, GREEN, select_command),
-            (confirm_text, BLUE, confirm_command),
+            (back_text, "#303030", WHITE, back_command),
+            (delete_text, RED, PANEL_FG, delete_command),
+            (select_text, GREEN, PANEL_FG, select_command),
+            (confirm_text, BLUE, PANEL_FG, confirm_command),
         ]
-        for text, color, command in buttons:
+        for text, color, fg, command in buttons:
             tk.Button(
                 footer,
                 text=text,
                 command=command,
                 bg=color,
-                fg=WHITE,
+                fg=fg,
                 activebackground=color,
-                activeforeground=WHITE,
+                activeforeground=fg,
                 relief="flat",
-                font=("Arial", 11, "bold"),
-                padx=18,
-                pady=10,
-            ).pack(side="left", expand=True, fill="x", padx=3)
+                bd=0,
+                borderwidth=0,
+                highlightthickness=0,
+                font=("Arial", 12),
+                pady=16,
+            ).pack(side="left", expand=True, fill="both")
 
     def field_row(self, parent: tk.Widget, label: str, value: str, active: bool) -> tk.Label:
         row = tk.Frame(parent, bg=PANEL_BG)
@@ -202,10 +206,11 @@ class UiComponentsMixin:
         return True
 
     def style_option_label(self, label: tk.Label, active: bool) -> None:
+        font_size = getattr(label, "option_font_size", 17)
         label.configure(
             bg=BLUE if active else GREY,
             fg=WHITE if active else PANEL_FG,
-            font=("Arial", 17, "bold"),
+            font=("Arial", font_size, "bold"),
         )
 
     def style_diameter_label(self, label: tk.Label, active: bool) -> None:
