@@ -48,6 +48,7 @@ class CaudalimetroApp(
         self.pin = ""
         self.active_field = 0
         self.selected_index = 0
+        self.send_review_first_row = 0
         self.operator_options = OPERATOR_OPTIONS.copy()
         self.operator_passwords = OPERATOR_PASSWORDS.copy()
         self.operator_list_open = False

@@ -1851,63 +1851,29 @@ class ScreensMixin:
         for i, option in enumerate(options):
             self.option_row(panel, option, i == self.selected_index)
 
-    def show_send_data(self) -> None:
-        self.screen = "SEND"
-        panel = self.build_base("Envio de dados", "Sincronização")
-        pending = self.pending_sessions_count()
-        tk.Label(
-            panel,
-            text="Enviar medições guardadas",
-            bg=PANEL_BG,
-            fg=PANEL_FG,
-            font=("Arial", 18, "bold"),
-        ).pack(pady=(42, 16))
-        tk.Label(
-            panel,
-            text=f"Sessões pendentes: {pending}",
-            bg=PANEL_BG,
-            fg=BLUE if pending else GREEN,
-            font=("Arial", 18, "bold"),
-        ).pack(pady=(0, 20))
-
-        options = self.get_send_options()
-        self.selected_index = min(self.selected_index, len(options) - 1)
-        for i, option in enumerate(options):
-            self.option_row(panel, option, i == self.selected_index)
-
-        tk.Label(
-            panel,
-            text="Nesta versão o envio é simulado e copiado para data/enviados/.",
-            bg=PANEL_BG,
-            fg="#555555",
-            font=("Arial", 11),
-        ).pack(pady=12)
-
-    def get_send_options(self) -> list[str]:
-        return ["Verificar medições", "Voltar ao menu"]
-
     def show_send_review(self) -> None:
         self.screen = "SEND_REVIEW"
         panel = self.build_base(
-            "Verificar medições",
-            "Pré-envio",
+            "",
+            "",
             select_text="Enviar selecionado",
             confirm_text="Enviar",
         )
+        panel.configure(bg=WHITE)
         sessions = self.load_pending_sessions()
         rows = self.pending_measurement_rows(sessions)
 
         tk.Label(
             panel,
             text="Medições pendentes",
-            bg=PANEL_BG,
+            bg=WHITE,
             fg=PANEL_FG,
             font=("Arial", 18, "bold"),
         ).pack(pady=(18, 6))
         tk.Label(
             panel,
             text=f"Sessões: {len(sessions)} | Medições: {len(rows)}",
-            bg=PANEL_BG,
+            bg=WHITE,
             fg=BLUE if sessions else GREEN,
             font=("Arial", 14, "bold"),
         ).pack(pady=(0, 12))
@@ -1915,11 +1881,22 @@ class ScreensMixin:
         if rows:
             session_count = self.pending_review_session_count(rows)
             self.selected_index = min(self.selected_index, session_count - 1)
-            max_rows = 10 if self.winfo_height() >= 700 else 5
-            first_visible_row = self.first_visible_pending_row(rows, max_rows)
+            max_rows = self.send_review_visible_row_count()
+            max_start = max(len(rows) - max_rows, 0)
+            first_visible_row = max(
+                0,
+                min(getattr(self, "send_review_first_row", 0), max_start),
+            )
+            self.send_review_first_row = first_visible_row
             visible_rows = rows[first_visible_row : first_visible_row + max_rows]
-            table = tk.Frame(panel, bg=PANEL_BG)
-            table.pack(fill="x", padx=24, pady=(0, 6))
+            if visible_rows and all(
+                row["_session_index"] != self.selected_index for row in visible_rows
+            ):
+                self.selected_index = int(visible_rows[0]["_session_index"])
+            table_area = tk.Frame(panel, bg=WHITE)
+            table_area.pack(fill="x", padx=24, pady=(0, 0))
+            table = tk.Frame(table_area, bg=WHITE)
+            table.pack(side="left", fill="x", expand=True)
             headers = [
                 ("Data", 14),
                 ("Operador", 12),
@@ -1966,17 +1943,20 @@ class ScreensMixin:
                     ).grid(row=row_index, column=col, padx=1, pady=1, sticky="ew")
 
             if len(rows) > max_rows:
-                last_visible_row = first_visible_row + len(visible_rows)
-                tk.Label(
-                    panel,
-                    text=(
-                        f"A mostrar {first_visible_row + 1}-{last_visible_row} "
-                        f"de {len(rows)} medições."
-                    ),
-                    bg=PANEL_BG,
-                    fg="#555555",
-                    font=("Arial", 10),
-                ).pack(pady=(0, 4))
+                scrollbar = tk.Frame(table_area, bg="#d7d7d7", width=22)
+                scrollbar.pack(side="right", fill="y", padx=(8, 0))
+                scrollbar.pack_propagate(False)
+
+                visible_fraction = max(0.12, min(1.0, len(visible_rows) / len(rows)))
+                max_start = max(len(rows) - len(visible_rows), 1)
+                thumb_top = (first_visible_row / max_start) * (1.0 - visible_fraction)
+                tk.Frame(scrollbar, bg="#555555").place(
+                    relx=0.5,
+                    rely=thumb_top,
+                    anchor="n",
+                    relwidth=0.5,
+                    relheight=visible_fraction,
+                )
         else:
             message = "Não existem medições pendentes para verificar."
             if sessions:
@@ -1984,42 +1964,23 @@ class ScreensMixin:
             tk.Label(
                 panel,
                 text=message,
-                bg=PANEL_BG,
+                bg=WHITE,
                 fg="#555555",
                 font=("Arial", 13),
             ).pack(pady=22)
-
-        tk.Label(
-            panel,
-            text="Reveja os valores antes de confirmar o envio.",
-            bg=PANEL_BG,
-            fg="#555555",
-            font=("Arial", 11),
-        ).pack(pady=(8, 0))
 
     def pending_review_session_count(self, rows: list[dict[str, Any]]) -> int:
         if not rows:
             return 0
         return max(int(row["_session_index"]) for row in rows) + 1
 
-    def first_visible_pending_row(
-        self, rows: list[dict[str, Any]], max_rows: int
-    ) -> int:
-        selected_row_indexes = [
-            index
-            for index, row in enumerate(rows)
-            if row["_session_index"] == self.selected_index
-        ]
-        if not selected_row_indexes:
-            return 0
-
-        selected_first = selected_row_indexes[0]
-        selected_last = selected_row_indexes[-1]
-        max_start = max(len(rows) - max_rows, 0)
-        first_visible_row = min(selected_first, max_start)
-        if selected_last >= first_visible_row + max_rows:
-            first_visible_row = min(selected_last - max_rows + 1, max_start)
-        return first_visible_row
+    def send_review_visible_row_count(self) -> int:
+        height = max(self.winfo_height(), self.winfo_screenheight(), 480)
+        if height >= 900:
+            return 16
+        if height >= 700:
+            return 11
+        return 8
 
     def selected_pending_session_row(self) -> dict[str, Any] | None:
         rows = self.pending_measurement_rows(self.load_pending_sessions())

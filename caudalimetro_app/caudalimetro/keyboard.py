@@ -135,15 +135,22 @@ class KeyboardMixin:
             self.selected_index = (self.selected_index + delta) % 3
             if not self.update_option_selection():
                 self.show_summary()
-        elif self.screen == "SEND":
-            self.selected_index = (self.selected_index + delta) % len(self.get_send_options())
-            if not self.update_option_selection():
-                self.show_send_data()
         elif self.screen == "SEND_REVIEW":
             rows = self.pending_measurement_rows(self.load_pending_sessions())
             if rows:
-                session_count = self.pending_review_session_count(rows)
-                self.selected_index = (self.selected_index + delta) % session_count
+                max_rows = self.send_review_visible_row_count()
+                max_start = max(len(rows) - max_rows, 0)
+                if max_start:
+                    self.send_review_first_row = max(
+                        0,
+                        min(self.send_review_first_row + delta, max_start),
+                    )
+                    self.selected_index = int(
+                        rows[self.send_review_first_row]["_session_index"]
+                    )
+                else:
+                    session_count = self.pending_review_session_count(rows)
+                    self.selected_index = (self.selected_index + delta) % session_count
                 self.show_send_review()
         elif self.screen == "ADMIN_OPERATORS":
             operators = self.managed_operator_options()
@@ -447,8 +454,10 @@ class KeyboardMixin:
                 self.input_value = ""
                 self.show_mold()
             else:
+                self.status_text = ""
                 self.selected_index = 0
-                self.show_send_data()
+                self.send_review_first_row = 0
+                self.show_send_review()
 
         elif self.screen == "MOLD":
             if not self.input_value:
@@ -544,26 +553,20 @@ class KeyboardMixin:
                 self.reset_operator_only()
                 self.show_menu()
             elif self.selected_index == 1:
+                self.status_text = ""
                 self.selected_index = 0
-                self.show_send_data()
+                self.send_review_first_row = 0
+                self.show_send_review()
             else:
                 self.logout()
                 self.show_login()
-
-        elif self.screen == "SEND":
-            if self.selected_index == 0:
-                self.status_text = ""
-                self.selected_index = 0
-                self.show_send_review()
-            else:
-                self.selected_index = 0
-                self.show_menu()
 
         elif self.screen == "SEND_REVIEW":
             count = self.simulate_send_pending_sessions()
             self.status_text = f"Envio concluído. Sessões enviadas: {count}."
             self.selected_index = 0
-            self.show_send_data()
+            self.send_review_first_row = 0
+            self.show_send_review()
 
         elif self.screen == "ADMIN_OPERATORS":
             self.logout_to_login()
@@ -622,8 +625,10 @@ class KeyboardMixin:
         elif self.screen == "SIDE_COMPLETE":
             self.show_circuit_results()
         elif self.screen == "SEND_REVIEW":
+            self.status_text = ""
             self.selected_index = 0
-            self.show_send_data()
+            self.send_review_first_row = 0
+            self.show_menu()
         elif self.screen == "ADMIN_OPERATORS":
             self.logout_to_login()
         elif self.screen == "ADMIN_ADD_OPERATOR":
@@ -632,7 +637,7 @@ class KeyboardMixin:
             self.cancel_admin_operator_removal()
         elif self.screen == "CREDITS":
             self.show_login()
-        elif self.screen in ("SUMMARY", "SEND"):
+        elif self.screen == "SUMMARY":
             self.show_menu()
 
     def refresh_current_screen(self) -> None:
