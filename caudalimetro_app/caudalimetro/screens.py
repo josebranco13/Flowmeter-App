@@ -229,14 +229,22 @@ class ScreensMixin:
 
     def visible_admin_operator_options(self) -> list[tuple[int, str]]:
         operators = self.managed_operator_options()
-        max_visible = 6
+        max_visible = self.admin_operator_visible_count()
         if len(operators) <= max_visible:
             return list(enumerate(operators))
 
-        start = self.selected_admin_operator_index - 3
+        start = self.selected_admin_operator_index - (max_visible // 2)
         start = max(0, min(start, len(operators) - max_visible))
         end = start + max_visible
         return list(enumerate(operators[start:end], start=start))
+
+    def admin_operator_visible_count(self) -> int:
+        height = max(self.winfo_height(), self.winfo_screenheight(), 480)
+        if height >= 900:
+            return 12
+        if height >= 700:
+            return 10
+        return 8
 
     def show_admin_operators(self) -> None:
         self.screen = "ADMIN_OPERATORS"
@@ -286,12 +294,33 @@ class ScreensMixin:
         visible_options = self.visible_admin_operator_options()
         self.admin_operator_labels = []
         self.admin_visible_indices = [index for index, _ in visible_options]
+        self.admin_operator_scrollbar = None
         if visible_options:
+            list_area = tk.Frame(panel, bg=PANEL_BG)
+            list_area.pack(fill="x", padx=60)
+            operator_list = tk.Frame(list_area, bg=PANEL_BG)
+            operator_list.pack(side="left", fill="x", expand=True)
             for index, operator in visible_options:
-                label = tk.Label(panel, text=operator, pady=6, padx=10, anchor="w")
+                label = tk.Label(
+                    operator_list,
+                    text=operator,
+                    pady=4,
+                    padx=10,
+                    anchor="w",
+                )
                 self.style_option_label(label, index == self.selected_admin_operator_index)
-                label.pack(fill="x", padx=60, pady=2)
+                label.pack(fill="x", pady=1)
                 self.admin_operator_labels.append(label)
+
+            if len(operators) > len(visible_options):
+                self.admin_operator_scrollbar = tk.Frame(
+                    list_area,
+                    bg="#d7d7d7",
+                    width=22,
+                )
+                self.admin_operator_scrollbar.pack(side="right", fill="y", padx=(8, 0))
+                self.admin_operator_scrollbar.pack_propagate(False)
+                self.update_admin_operator_scrollbar(operators, visible_options)
         else:
             tk.Label(
                 panel,
@@ -300,15 +329,6 @@ class ScreensMixin:
                 fg="#555555",
                 font=("Arial", 12),
             ).pack(fill="x", padx=60, pady=12)
-
-        if len(operators) > len(visible_options):
-            tk.Label(
-                panel,
-                text=f"A mostrar {len(visible_options)} de {len(operators)} operadores.",
-                bg=PANEL_BG,
-                fg="#555555",
-                font=("Arial", 10),
-            ).pack(fill="x", padx=60, pady=(4, 0))
 
     def update_admin_operator_selection(self) -> bool:
         visible_options = self.visible_admin_operator_options()
@@ -321,10 +341,38 @@ class ScreensMixin:
                 self.admin_visible_indices.append(index)
                 label.configure(text=operator)
                 self.style_option_label(label, index == self.selected_admin_operator_index)
+            self.update_admin_operator_scrollbar(
+                self.managed_operator_options(),
+                visible_options,
+            )
         except tk.TclError:
             return False
 
         return True
+
+    def update_admin_operator_scrollbar(
+        self,
+        operators: list[str],
+        visible_options: list[tuple[int, str]],
+    ) -> None:
+        scrollbar = getattr(self, "admin_operator_scrollbar", None)
+        if scrollbar is None or not visible_options or not operators:
+            return
+
+        for child in scrollbar.winfo_children():
+            child.destroy()
+
+        visible_fraction = max(0.12, min(1.0, len(visible_options) / len(operators)))
+        max_start = max(len(operators) - len(visible_options), 1)
+        first_visible_index = visible_options[0][0]
+        thumb_top = (first_visible_index / max_start) * (1.0 - visible_fraction)
+        tk.Frame(scrollbar, bg="#555555").place(
+            relx=0.5,
+            rely=thumb_top,
+            anchor="n",
+            relwidth=0.5,
+            relheight=visible_fraction,
+        )
 
     def show_admin_add_operator(self) -> None:
         self.screen = "ADMIN_ADD_OPERATOR"
