@@ -562,8 +562,8 @@ class KeyboardMixin:
                 self.show_login()
 
         elif self.screen == "SEND_REVIEW":
-            count = self.simulate_send_pending_sessions()
-            self.status_text = f"Envio concluído. Sessões enviadas: {count}."
+            count = self.send_pending_measurements_for_current_operator()
+            self.status_text = f"Envio concluído. Medições enviadas: {count}."
             self.selected_index = 0
             self.send_review_first_row = 0
             self.show_send_review()

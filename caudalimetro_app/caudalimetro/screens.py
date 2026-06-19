@@ -1862,6 +1862,7 @@ class ScreensMixin:
         panel.configure(bg=WHITE)
         sessions = self.load_pending_sessions()
         rows = self.pending_measurement_rows(sessions)
+        session_count = self.pending_review_session_count(rows)
 
         tk.Label(
             panel,
@@ -1872,14 +1873,13 @@ class ScreensMixin:
         ).pack(pady=(18, 6))
         tk.Label(
             panel,
-            text=f"Sessões: {len(sessions)} | Medições: {len(rows)}",
+            text=f"Sessões: {session_count} | Medições: {len(rows)}",
             bg=WHITE,
-            fg=BLUE if sessions else GREEN,
+            fg=BLUE if rows else GREEN,
             font=("Arial", 14, "bold"),
         ).pack(pady=(0, 12))
 
         if rows:
-            session_count = self.pending_review_session_count(rows)
             self.selected_index = min(self.selected_index, session_count - 1)
             max_rows = self.send_review_visible_row_count()
             max_start = max(len(rows) - max_rows, 0)
@@ -1903,9 +1903,7 @@ class ScreensMixin:
                 ("Molde", 10),
                 ("Lado", 12),
                 ("Circ.", 5),
-                ("Min", 8),
-                ("Médio", 8),
-                ("Máx", 8),
+                ("Médio", 10),
             ]
             for col, (header, width) in enumerate(headers):
                 table.grid_columnconfigure(col, weight=width)
@@ -1927,9 +1925,7 @@ class ScreensMixin:
                     item["molde"],
                     item["lado"],
                     item["circuito"],
-                    item["min"],
                     item["medio"],
-                    item["max"],
                 ]
                 for col, value in enumerate(values):
                     tk.Label(
@@ -1959,7 +1955,9 @@ class ScreensMixin:
                 )
         else:
             message = "Não existem medições pendentes para verificar."
-            if sessions:
+            if sessions and self.operator_id != "ADMIN":
+                message = "Não existem medições pendentes deste operador."
+            elif sessions:
                 message = "As sessões pendentes ainda não têm medições guardadas."
             tk.Label(
                 panel,
@@ -1982,58 +1980,103 @@ class ScreensMixin:
             return 11
         return 8
 
-    def selected_pending_session_row(self) -> dict[str, Any] | None:
+    def selected_pending_session_rows(self) -> list[dict[str, Any]]:
         rows = self.pending_measurement_rows(self.load_pending_sessions())
         if not rows:
             self.selected_index = 0
-            return None
+            return []
 
         session_count = self.pending_review_session_count(rows)
         self.selected_index = min(self.selected_index, session_count - 1)
-        for row in rows:
-            if row["_session_index"] == self.selected_index:
-                return row
-        return None
+        return [row for row in rows if row["_session_index"] == self.selected_index]
+
+    def should_show_pending_measurement(
+        self, measurement: dict[str, Any], session_operator: str
+    ) -> bool:
+        if self.operator_id == "ADMIN":
+            return True
+        operator = measurement.get("operador") or session_operator
+        return (
+            self.normalize_operator_name(str(operator))
+            == self.normalize_operator_name(self.operator_id)
+        )
 
     def delete_selected_pending_session(self) -> None:
-        row = self.selected_pending_session_row()
-        if row is None:
-            self.status_text = "Não existe uma sessão selecionada para apagar."
+        selected_rows = self.selected_pending_session_rows()
+        if not selected_rows:
+            self.status_text = "Não existe uma medição selecionada para apagar."
             self.show_send_review()
             return
 
-        deleted = self.delete_pending_session(str(row["_file_name"]))
-        if deleted:
-            self.status_text = "Sessão apagada."
+        deleted_count = self.delete_pending_measurement_rows(selected_rows)
+        if deleted_count:
+            self.status_text = f"Medições apagadas: {deleted_count}."
             remaining_rows = self.pending_measurement_rows(self.load_pending_sessions())
             if remaining_rows:
                 session_count = self.pending_review_session_count(remaining_rows)
                 self.selected_index = min(self.selected_index, session_count - 1)
             else:
                 self.selected_index = 0
+            self.send_review_first_row = 0
         else:
-            self.status_text = "Não foi possível apagar a sessão selecionada."
+            self.status_text = "Não foi possível apagar a medição selecionada."
         self.show_send_review()
 
     def send_selected_pending_session(self) -> None:
-        row = self.selected_pending_session_row()
-        if row is None:
-            self.status_text = "Não existe uma sessão selecionada para enviar."
+        selected_rows = self.selected_pending_session_rows()
+        if not selected_rows:
+            self.status_text = "Não existe uma medição selecionada para enviar."
             self.show_send_review()
             return
 
-        sent = self.simulate_send_pending_session(str(row["_file_name"]))
-        if sent:
-            self.status_text = "Sessão enviada."
+        sent_count = self.send_pending_measurement_rows(selected_rows)
+        if sent_count:
+            self.status_text = f"Medições enviadas: {sent_count}."
             remaining_rows = self.pending_measurement_rows(self.load_pending_sessions())
             if remaining_rows:
                 session_count = self.pending_review_session_count(remaining_rows)
                 self.selected_index = min(self.selected_index, session_count - 1)
             else:
                 self.selected_index = 0
+            self.send_review_first_row = 0
         else:
-            self.status_text = "Não foi possível enviar a sessão selecionada."
+            self.status_text = "Não foi possível enviar a medição selecionada."
         self.show_send_review()
+
+    def send_pending_measurements_for_current_operator(self) -> int:
+        return self.send_pending_measurement_rows(
+            self.pending_measurement_rows(self.load_pending_sessions())
+        )
+
+    def send_pending_measurement_rows(self, rows: list[dict[str, Any]]) -> int:
+        sent_count = 0
+        row_refs = sorted(
+            (
+                (str(row["_file_name"]), int(row["_measurement_index"]))
+                for row in rows
+            ),
+            key=lambda item: (item[0], item[1]),
+            reverse=True,
+        )
+        for file_name, measurement_index in row_refs:
+            if self.simulate_send_pending_measurement(file_name, measurement_index):
+                sent_count += 1
+        return sent_count
+
+    def delete_pending_measurement_rows(self, rows: list[dict[str, Any]]) -> int:
+        deleted_count = 0
+        row_refs = sorted(
+            (
+                (str(row["_file_name"]), int(row["_measurement_index"]))
+                for row in rows
+            ),
+            key=lambda item: (item[0], item[1]),
+            reverse=True,
+        )
+        for file_name, measurement_index in row_refs:
+            if self.delete_pending_measurement(file_name, measurement_index):
+                deleted_count += 1
+        return deleted_count
 
     def pending_measurement_rows(self, sessions: list[dict[str, Any]]) -> list[dict[str, Any]]:
         rows: list[dict[str, Any]] = []
@@ -2055,6 +2098,9 @@ class ScreensMixin:
                     continue
 
                 operator = measurement.get("operador") or session_operator
+                if not self.should_show_pending_measurement(measurement, session_operator):
+                    continue
+
                 session_rows.append(
                     {
                         "_file_name": file_name,
@@ -2067,14 +2113,8 @@ class ScreensMixin:
                         "circuito": self.short_table_text(
                             measurement.get("circuito") or "-", 5
                         ),
-                        "min": self.format_measurement_value(
-                            measurement.get("caudal_min_l_min")
-                        ),
                         "medio": self.format_measurement_value(
                             measurement.get("caudal_medio_l_min")
-                        ),
-                        "max": self.format_measurement_value(
-                            measurement.get("caudal_max_l_min")
                         ),
                     }
                 )
