@@ -4,6 +4,12 @@ import tkinter as tk
 
 
 class KeyboardMixin:
+    def restore_keyboard_focus(self, _event: tk.Event | None = None) -> None:
+        try:
+            self.focus_set()
+        except tk.TclError:
+            return
+
     def on_key(self, event: tk.Event) -> None:
         key = event.keysym
         char = event.char

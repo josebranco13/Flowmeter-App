@@ -18,6 +18,7 @@ class UiComponentsMixin:
     def clear(self) -> None:
         for child in self.winfo_children():
             child.destroy()
+        self.after_idle(self.restore_keyboard_focus)
 
     def build_base(
         self,
@@ -161,8 +162,8 @@ class UiComponentsMixin:
         for text, color, fg, command in buttons:
             tk.Button(
                 footer,
+                takefocus=0,
                 text=text,
-                command=command,
                 bg=color,
                 fg=fg,
                 activebackground=color,

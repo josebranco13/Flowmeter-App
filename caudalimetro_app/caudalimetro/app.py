@@ -36,6 +36,7 @@ class CaudalimetroApp(
         self.geometry(f"{APP_WIDTH}x{APP_HEIGHT}")
         self.minsize(APP_WIDTH, APP_HEIGHT)
         self.configure(bg=APP_BG)
+        self.option_add("*Button.takeFocus", 0)
         self.maximize_window()
 
         DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -91,9 +92,11 @@ class CaudalimetroApp(
         self.measure_labels: dict[str, tk.Label] = {}
         self.status_text = ""
 
-        self.bind("<Key>", self.on_key)
+        self.bind_all("<KeyPress>", self.on_key)
+        self.bind_all("<ButtonRelease-1>", self.restore_keyboard_focus, add="+")
         self.protocol("WM_DELETE_WINDOW", self.destroy)
         self.show_login()
+        self.after_idle(self.restore_keyboard_focus)
 
     def maximize_window(self) -> None:
         try:

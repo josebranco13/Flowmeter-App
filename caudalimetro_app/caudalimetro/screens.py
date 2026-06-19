@@ -96,6 +96,7 @@ class ScreensMixin:
 
         tk.Button(
             credits_container,
+            takefocus=0,
             text="Créditos",
             bg="#303030",
             fg=WHITE,
@@ -146,7 +147,6 @@ class ScreensMixin:
             padx=10,
         )
         value_label.pack(side="left", fill="both", expand=True)
-        clickable_widgets = [field, value_label]
 
         if show_arrow:
             arrow_label = tk.Label(
@@ -158,12 +158,6 @@ class ScreensMixin:
                 width=2,
             )
             arrow_label.pack(side="right", fill="y")
-            clickable_widgets.append(arrow_label)
-
-        #if command is not None:
-            #for widget in clickable_widgets:
-                #widget.configure(cursor="hand2")
-                #widget.bind("<Button-1>", lambda _event, action=command: action())
 
         return value_label
 
@@ -197,8 +191,8 @@ class ScreensMixin:
         for text, bg, fg, command in buttons:
             tk.Button(
                 footer,
+                takefocus=0,
                 text=text,
-                command=command,
                 bg=bg,
                 fg=fg,
                 activebackground=bg,
@@ -538,8 +532,8 @@ class ScreensMixin:
         ]:
             tk.Button(
                 footer,
+                takefocus=0,
                 text=text,
-                command=command,
                 bg=bg,
                 fg=WHITE,
                 activebackground=bg,
@@ -698,8 +692,8 @@ class ScreensMixin:
         for text, bg, fg, command in buttons:
             tk.Button(
                 footer,
+                takefocus=0,
                 text=text,
-                command=command,
                 bg=bg,
                 fg=fg,
                 activebackground=bg,
@@ -816,8 +810,8 @@ class ScreensMixin:
         operator_action.grid(row=3, column=0, columnspan=2, pady=(12, 0))
         tk.Button(
             operator_action,
+            takefocus=0,
             text="Trocar\nOperador",
-            command=self.change_operator_from_mold_side,
             bg="#1f1f1f",
             fg=WHITE,
             activebackground="#1f1f1f",
@@ -866,8 +860,8 @@ class ScreensMixin:
         for text, bg, fg, command in buttons:
             tk.Button(
                 footer,
+                takefocus=0,
                 text=text,
-                command=command,
                 bg=bg,
                 fg=fg,
                 activebackground=bg,
@@ -891,8 +885,8 @@ class ScreensMixin:
         for text, bg, fg, command in buttons:
             tk.Button(
                 footer,
+                takefocus=0,
                 text=text,
-                command=command,
                 bg=bg,
                 fg=fg,
                 activebackground=bg,
@@ -1382,8 +1376,8 @@ class ScreensMixin:
         ).pack(fill="both", expand=True)
         tk.Button(
             form,
+            takefocus=0,
             text="Medir Caudal",
-            command=self.start_current_flow_measurement,
             bg="#1f1f1f",
             fg=WHITE,
             activebackground="#1f1f1f",
@@ -1495,8 +1489,8 @@ class ScreensMixin:
         highlight_action.grid(row=3, column=0, columnspan=3, pady=(24, 0))
         tk.Button(
             highlight_action,
+            takefocus=0,
             text="Destacar",
-            command=self.highlight_current_measurement,
             bg="#ff1010",
             fg=PANEL_FG,
             activebackground="#ff1010",
