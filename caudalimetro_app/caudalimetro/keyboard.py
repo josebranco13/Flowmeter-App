@@ -100,6 +100,10 @@ class KeyboardMixin:
             self.selected_index = (self.selected_index + delta) % len(self.menu_options)
             if not self.update_option_selection():
                 self.show_menu()
+        elif self.screen == "ADMIN_MENU":
+            self.selected_index = (self.selected_index + delta) % 2
+            if not self.update_option_selection():
+                self.show_admin_menu()
         elif self.screen == "DIAMETER":
             self.move_diameter_selection(delta)
             if not self.update_diameter_selection():
@@ -442,7 +446,8 @@ class KeyboardMixin:
             if self.operator_id == "ADMIN":
                 self.admin_operator_input = ""
                 self.selected_admin_operator_index = 0
-                self.show_admin_operators()
+                self.selected_index = 0
+                self.show_admin_menu()
             else:
                 self.show_menu()
 
@@ -453,6 +458,16 @@ class KeyboardMixin:
                 self.start_new_session()
                 self.input_value = ""
                 self.show_mold()
+            else:
+                self.status_text = ""
+                self.selected_index = 0
+                self.send_review_first_row = 0
+                self.show_send_review()
+
+        elif self.screen == "ADMIN_MENU":
+            if self.selected_index == 0:
+                self.selected_admin_operator_index = 0
+                self.show_admin_operators()
             else:
                 self.status_text = ""
                 self.selected_index = 0
@@ -584,6 +599,9 @@ class KeyboardMixin:
         if self.screen == "MENU":
             self.logout_to_login()
             return
+        if self.screen == "ADMIN_MENU":
+            self.logout_to_login()
+            return
         elif self.screen == "MOLD":
             self.show_menu()
         elif self.screen == "MOLD_SIDE":
@@ -628,9 +646,13 @@ class KeyboardMixin:
             self.status_text = ""
             self.selected_index = 0
             self.send_review_first_row = 0
-            self.show_menu()
+            if self.operator_id == "ADMIN":
+                self.show_admin_menu()
+            else:
+                self.show_menu()
         elif self.screen == "ADMIN_OPERATORS":
-            self.logout_to_login()
+            self.selected_index = 0
+            self.show_admin_menu()
         elif self.screen == "ADMIN_ADD_OPERATOR":
             self.cancel_admin_add_operator()
         elif self.screen == "ADMIN_REMOVE_CONFIRM":

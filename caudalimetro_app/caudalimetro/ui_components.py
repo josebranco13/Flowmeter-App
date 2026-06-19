@@ -208,10 +208,11 @@ class UiComponentsMixin:
 
     def style_option_label(self, label: tk.Label, active: bool) -> None:
         font_size = getattr(label, "option_font_size", 17)
+        font_weight = getattr(label, "option_font_weight", "bold")
         label.configure(
             bg=BLUE if active else GREY,
             fg=WHITE if active else PANEL_FG,
-            font=("Arial", font_size, "bold"),
+            font=("Arial", font_size, font_weight),
         )
 
     def style_diameter_label(self, label: tk.Label, active: bool) -> None:

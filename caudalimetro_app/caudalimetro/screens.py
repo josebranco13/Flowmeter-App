@@ -246,6 +246,35 @@ class ScreensMixin:
             return 10
         return 8
 
+    def show_admin_menu(self) -> None:
+        self.screen = "ADMIN_MENU"
+        self.selected_index = min(self.selected_index, 1)
+        panel = self.build_base(
+            "Admin",
+            "",
+            back_text="Logout",
+            back_command=self.logout_to_login,
+            center_title=True,
+        )
+        panel.configure(bg=WHITE)
+
+        menu_content = tk.Frame(panel, bg=WHITE)
+        menu_content.pack(expand=True, anchor="center")
+
+        for i, option in enumerate(("Operadores", "Enviar dados")):
+            label = tk.Label(
+                menu_content,
+                text=option,
+                pady=18,
+                padx=36,
+                width=34,
+                anchor="center",
+            )
+            label.option_font_size = 20
+            self.style_option_label(label, i == self.selected_index)
+            label.pack(fill="x", pady=8)
+            self.option_labels.append(label)
+
     def show_admin_operators(self) -> None:
         self.screen = "ADMIN_OPERATORS"
         self.refresh_operator_options()
@@ -262,43 +291,37 @@ class ScreensMixin:
         self.status_text = ""
         panel = self.build_base(
             "Operadores",
-            "Admin",
-            back_text="Logout",
-            back_command=self.logout_to_login,
+            "",
+            back_text="Voltar",
+            back_command=self.show_admin_menu,
             delete_text="Remover",
             delete_command=self.remove_selected_admin_operator,
             select_text="Adicionar Operador",
             select_command=self.show_admin_add_operator,
             confirm_text="Sair",
             confirm_command=self.logout_to_login,
+            center_title=True,
         )
+        panel.configure(bg=WHITE)
         self.status_text = admin_status_text
 
         if admin_status_text:
             tk.Label(
                 panel,
                 text=admin_status_text,
-                bg=PANEL_BG,
+                bg=WHITE,
                 fg="#c48b00",
                 font=("Arial", 12, "bold"),
             ).pack(fill="x", padx=60, pady=(18, 6))
-
-        tk.Label(
-            panel,
-            text="Operadores ativos",
-            bg=PANEL_BG,
-            fg="#555555",
-            font=("Arial", 12, "bold"),
-        ).pack(fill="x", padx=60, pady=(22 if not admin_status_text else 4, 2))
 
         visible_options = self.visible_admin_operator_options()
         self.admin_operator_labels = []
         self.admin_visible_indices = [index for index, _ in visible_options]
         self.admin_operator_scrollbar = None
         if visible_options:
-            list_area = tk.Frame(panel, bg=PANEL_BG)
-            list_area.pack(fill="x", padx=60)
-            operator_list = tk.Frame(list_area, bg=PANEL_BG)
+            list_area = tk.Frame(panel, bg=WHITE)
+            list_area.pack(fill="x", padx=60, pady=(18 if not admin_status_text else 4, 0))
+            operator_list = tk.Frame(list_area, bg=WHITE)
             operator_list.pack(side="left", fill="x", expand=True)
             for index, operator in visible_options:
                 label = tk.Label(
@@ -325,7 +348,7 @@ class ScreensMixin:
             tk.Label(
                 panel,
                 text="Sem operadores criados.",
-                bg=PANEL_BG,
+                bg=WHITE,
                 fg="#555555",
                 font=("Arial", 12),
             ).pack(fill="x", padx=60, pady=12)
@@ -1911,6 +1934,12 @@ class ScreensMixin:
         sessions = self.load_pending_sessions()
         rows = self.pending_measurement_rows(sessions)
         session_count = self.pending_review_session_count(rows)
+        operator_count = len({row["_operator_key"] for row in rows})
+        count_text = (
+            f"Operadores: {operator_count} | Medições: {len(rows)}"
+            if self.operator_id == "ADMIN"
+            else f"Sessões: {session_count} | Medições: {len(rows)}"
+        )
 
         tk.Label(
             panel,
@@ -1921,7 +1950,7 @@ class ScreensMixin:
         ).pack(pady=(18, 6))
         tk.Label(
             panel,
-            text=f"Sessões: {session_count} | Medições: {len(rows)}",
+            text=count_text,
             bg=WHITE,
             fg=BLUE if rows else GREEN,
             font=("Arial", 14, "bold"),
@@ -1945,14 +1974,26 @@ class ScreensMixin:
             table_area.pack(fill="x", padx=24, pady=(0, 0))
             table = tk.Frame(table_area, bg=WHITE)
             table.pack(side="left", fill="x", expand=True)
-            headers = [
-                ("Data", 14),
-                ("Operador", 12),
-                ("Molde", 10),
-                ("Lado", 12),
-                ("Circ.", 5),
-                ("Médio", 10),
-            ]
+            if self.operator_id == "ADMIN":
+                headers = [
+                    ("Data", 14),
+                    ("Operador", 12),
+                    ("Molde", 10),
+                    ("Lado", 12),
+                    ("Circ.", 5),
+                    ("Min", 8),
+                    ("Médio", 8),
+                    ("Máx", 8),
+                ]
+            else:
+                headers = [
+                    ("Data", 14),
+                    ("Operador", 12),
+                    ("Molde", 10),
+                    ("Lado", 12),
+                    ("Circ.", 5),
+                    ("Médio", 10),
+                ]
             for col, (header, width) in enumerate(headers):
                 table.grid_columnconfigure(col, weight=width)
                 tk.Label(
@@ -1967,14 +2008,26 @@ class ScreensMixin:
 
             for row_index, item in enumerate(visible_rows, start=1):
                 is_selected = item["_session_index"] == self.selected_index
-                values = [
-                    item["data"],
-                    item["operador"],
-                    item["molde"],
-                    item["lado"],
-                    item["circuito"],
-                    item["medio"],
-                ]
+                if self.operator_id == "ADMIN":
+                    values = [
+                        item["data"],
+                        item["operador"],
+                        item["molde"],
+                        item["lado"],
+                        item["circuito"],
+                        item["min"],
+                        item["medio"],
+                        item["max"],
+                    ]
+                else:
+                    values = [
+                        item["data"],
+                        item["operador"],
+                        item["molde"],
+                        item["lado"],
+                        item["circuito"],
+                        item["medio"],
+                    ]
                 for col, value in enumerate(values):
                     tk.Label(
                         table,
@@ -2154,6 +2207,7 @@ class ScreensMixin:
                         "_file_name": file_name,
                         "_measurement_index": measurement_index,
                         "_session_index": session_index,
+                        "_operator_key": self.normalize_operator_name(str(operator)),
                         "data": session_date,
                         "operador": self.short_table_text(operator, 12),
                         "molde": mold,
@@ -2161,8 +2215,14 @@ class ScreensMixin:
                         "circuito": self.short_table_text(
                             measurement.get("circuito") or "-", 5
                         ),
+                        "min": self.format_measurement_value(
+                            measurement.get("caudal_min_l_min")
+                        ),
                         "medio": self.format_measurement_value(
                             measurement.get("caudal_medio_l_min")
+                        ),
+                        "max": self.format_measurement_value(
+                            measurement.get("caudal_max_l_min")
                         ),
                     }
                 )
