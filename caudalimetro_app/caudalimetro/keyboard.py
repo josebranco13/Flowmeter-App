@@ -108,6 +108,10 @@ class KeyboardMixin:
             self.move_diameter_selection(delta)
             if not self.update_diameter_selection():
                 self.show_diameter()
+        elif self.screen == "CIRCUITS":
+            if self.session and self.circuit_start_required_for_side(self.session.lado_molde):
+                self.circuit_active_field = (self.circuit_active_field + delta) % 2
+                self.show_circuits()
         elif self.screen == "MOLD_SIDE":
             if self.mold_side_dropdown_open and self.mold_side_options:
                 self.mold_side_dropdown_open = True
@@ -192,6 +196,32 @@ class KeyboardMixin:
     def update_input_value_field(self) -> bool:
         return self.update_field_value("input_value", self.input_value)
 
+    def active_circuit_input_key(self) -> str:
+        if (
+            self.session is not None
+            and self.circuit_start_required_for_side(self.session.lado_molde)
+            and self.circuit_active_field == 1
+        ):
+            return "start"
+        return "count"
+
+    def refresh_circuit_input_display(self) -> None:
+        self.input_value = self.circuit_inputs.get("count", "")
+        updated = self.update_field_value(
+            "circuit_count",
+            self.circuit_inputs.get("count", ""),
+        )
+        if self.session and self.circuit_start_required_for_side(self.session.lado_molde):
+            updated = (
+                self.update_field_value(
+                    "circuit_start",
+                    self.circuit_inputs.get("start", ""),
+                )
+                and updated
+            )
+        if not updated:
+            self.show_circuits()
+
     def add_char(self, char: str) -> None:
         if self.screen == "LOGIN":
             if self.login_active_field == 0:
@@ -218,9 +248,12 @@ class KeyboardMixin:
             if not self.update_input_value_field():
                 self.show_pressure()
         elif self.screen == "CIRCUITS":
-            self.input_value = (self.input_value + char)[:3]
-            if not self.update_field_value("input_value", self.input_value):
-                self.show_circuits()
+            if not char.isdigit():
+                return
+            key = self.active_circuit_input_key()
+            limit = 4 if key == "start" else 3
+            self.circuit_inputs[key] = (self.circuit_inputs.get(key, "") + char)[:limit]
+            self.refresh_circuit_input_display()
         elif self.screen == "CIRCUIT_RESULTS" and self.result_editing:
             if char == "." and "." in self.input_value:
                 return
@@ -265,9 +298,9 @@ class KeyboardMixin:
             else:
                 self.remeasure_selected_result()
         elif self.screen == "CIRCUITS":
-            self.input_value = self.input_value[:-1]
-            if not self.update_field_value("input_value", self.input_value):
-                self.show_circuits()
+            key = self.active_circuit_input_key()
+            self.circuit_inputs[key] = self.circuit_inputs.get(key, "")[:-1]
+            self.refresh_circuit_input_display()
         elif self.screen == "SIDE_COMPLETE":
             self.restart_current_side_measurements()
         elif self.screen == "SEND_REVIEW":
@@ -302,9 +335,9 @@ class KeyboardMixin:
             else:
                 self.remeasure_selected_result()
         elif self.screen == "CIRCUITS":
-            self.input_value = ""
-            if not self.update_field_value("input_value", ""):
-                self.show_circuits()
+            key = self.active_circuit_input_key()
+            self.circuit_inputs[key] = ""
+            self.refresh_circuit_input_display()
         elif self.screen == "SIDE_COMPLETE":
             self.restart_current_side_measurements()
         elif self.screen == "ADMIN_OPERATORS":
@@ -331,6 +364,24 @@ class KeyboardMixin:
                 self.change_operator_from_mold_side()
                 return
             self.select_mold_side()
+            return
+
+        if self.screen == "CIRCUITS":
+            if (
+                self.session is not None
+                and self.circuit_start_required_for_side(self.session.lado_molde)
+                and self.circuit_active_field == 0
+            ):
+                count = int(self.circuit_inputs.get("count") or self.input_value or "0")
+                if count <= 0:
+                    self.status_text = "Indique pelo menos 1 circuito."
+                    self.show_circuits()
+                    return
+                self.status_text = ""
+                self.circuit_active_field = 1
+                self.show_circuits()
+                return
+            self.confirm()
             return
 
         if self.screen == "CIRCUIT_START":
@@ -506,6 +557,8 @@ class KeyboardMixin:
             assert self.session is not None
             self.session.diametro_mm = self.diameter_options[self.selected_index]
             self.input_value = ""
+            self.circuit_active_field = 0
+            self.circuit_inputs = {"count": "", "start": ""}
             self.show_circuits()
 
         elif self.screen == "PRESSURE":
@@ -523,16 +576,29 @@ class KeyboardMixin:
             self.prepare_next_circuit_measurement()
 
         elif self.screen == "CIRCUITS":
-            count = int(self.input_value or "0")
+            assert self.session is not None
+            side = self.session.lado_molde
+            count = int(self.circuit_inputs.get("count") or self.input_value or "0")
             if count <= 0:
                 self.status_text = "Indique pelo menos 1 circuito."
                 self.show_circuits()
                 return
-            assert self.session is not None
-            self.session.circuitos_por_lado[self.session.lado_molde] = count
+            if self.circuit_start_required_for_side(side):
+                start = int(self.circuit_inputs.get("start") or "0")
+                if start <= 0:
+                    self.status_text = "Indique o numero do circuito inicial."
+                    self.circuit_active_field = 1
+                    self.show_circuits()
+                    return
+            else:
+                start = 1
+
+            self.session.circuitos_por_lado[side] = count
+            self.session.circuitos_inicio_por_lado[side] = start
             self.save_session()
             self.status_text = ""
             self.input_value = ""
+            self.circuit_active_field = 0
             self.show_pressure()
 
         elif self.screen == "SIDE":
@@ -613,12 +679,18 @@ class KeyboardMixin:
             self.show_mold_side()
         elif self.screen == "PRESSURE":
             if self.session is not None:
-                self.input_value = str(
-                    self.session.circuitos_por_lado.get(self.session.lado_molde, "")
-                )
+                side = self.session.lado_molde
+                self.circuit_inputs = {
+                    "count": str(self.session.circuitos_por_lado.get(side, "")),
+                    "start": str(self.session.circuitos_inicio_por_lado.get(side, 1)),
+                }
+                self.input_value = self.circuit_inputs["count"]
+                self.circuit_active_field = 0
             self.show_circuits()
         elif self.screen == "CIRCUITS":
             self.input_value = ""
+            self.circuit_inputs = {"count": "", "start": ""}
+            self.circuit_active_field = 0
             self.show_diameter()
         elif self.screen == "SIDE":
             self.show_circuits()

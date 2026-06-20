@@ -65,7 +65,7 @@ class CaudalimetroApp(
         self.input_value = ""
         self.login_active_field = 0
         self.circuit_active_field = 0
-        self.circuit_inputs = {"A": "", "B": ""}
+        self.circuit_inputs = {"count": "", "start": ""}
         self.diameter_options = DIAMETER_OPTIONS.copy()
         self.menu_options = MENU_OPTIONS.copy()
         self.selected_menu_option = ""

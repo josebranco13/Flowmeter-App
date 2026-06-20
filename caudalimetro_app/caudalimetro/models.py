@@ -30,6 +30,7 @@ class MeasurementSession:
     diametro_mm: int = 0
     pressao_entrada_bar: float = 0.0
     circuitos_por_lado: dict[str, int] = field(default_factory=dict)
+    circuitos_inicio_por_lado: dict[str, int] = field(default_factory=dict)
     estado: str = "em_medicao"
     criado_em: str = field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
     atualizado_em: str = field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))

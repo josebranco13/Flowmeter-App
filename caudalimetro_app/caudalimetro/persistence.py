@@ -29,7 +29,7 @@ class PersistenceMixin:
     def reset_operator_only(self) -> None:
         self.session = None
         self.input_value = ""
-        self.circuit_inputs = {"A": "", "B": ""}
+        self.circuit_inputs = {"count": "", "start": ""}
         self.side_options = []
         self.current_side = ""
         self.current_circuit = 0

@@ -25,6 +25,32 @@ class MeasurementMixin:
             return 0
         return int(self.session.circuitos_por_lado.get(side, 0))
 
+    @staticmethod
+    def is_fixed_plate_side(side: str) -> bool:
+        return side.strip().casefold() == "fixed plate"
+
+    def circuit_start_required_for_side(self, side: str) -> bool:
+        return bool(side) and not self.is_fixed_plate_side(side)
+
+    def circuit_start_for_side(self, side: str) -> int:
+        if self.session is None or not side:
+            return 1
+        if self.is_fixed_plate_side(side):
+            return 1
+        return int(self.session.circuitos_inicio_por_lado.get(side, 1))
+
+    def last_circuit_for_side(self, side: str) -> int:
+        expected = self.expected_count_for_side(side)
+        return self.circuit_start_for_side(side) + max(expected, 1) - 1
+
+    def next_circuit_for_side(self, side: str) -> int:
+        return self.circuit_start_for_side(side) + self.measured_count_for_side(side)
+
+    def circuit_progress_index(self) -> int:
+        if not self.current_side or not self.current_circuit:
+            return 0
+        return max(1, self.current_circuit - self.circuit_start_for_side(self.current_side) + 1)
+
     def expected_count_for_current_side(self) -> int:
         if self.session is None:
             return 0
@@ -70,10 +96,10 @@ class MeasurementMixin:
         self.current_side = side
         self.measurement_reviewing_saved_result = False
         if self.side_measurement_complete(side):
-            self.current_circuit = self.expected_count_for_side(side)
+            self.current_circuit = self.last_circuit_for_side(side)
             self.show_circuit_results()
             return
-        self.current_circuit = self.measured_count_for_side(side) + 1
+        self.current_circuit = self.next_circuit_for_side(side)
         self.samples = []
         self.measurement_running = False
         self.status_text = ""
@@ -84,13 +110,13 @@ class MeasurementMixin:
         self.current_side = self.session.lado_molde or self.current_side
         self.measurement_reviewing_saved_result = False
         if self.side_measurement_complete(self.current_side):
-            self.current_circuit = self.expected_count_for_side(self.current_side)
+            self.current_circuit = self.last_circuit_for_side(self.current_side)
             self.samples = []
             self.measurement_running = False
             self.status_text = ""
             self.show_circuit_results()
             return
-        self.current_circuit = self.measured_count_for_side(self.current_side) + 1
+        self.current_circuit = self.next_circuit_for_side(self.current_side)
         self.samples = []
         self.measurement_running = False
         self.status_text = ""
@@ -102,16 +128,17 @@ class MeasurementMixin:
         if not self.current_side:
             self.current_side = self.session.lado_molde
         if not self.current_circuit:
-            self.current_circuit = self.measured_count_for_side(self.current_side) + 1
+            self.current_circuit = self.next_circuit_for_side(self.current_side)
 
         expected = self.expected_count_for_side(self.current_side)
-        if expected and self.current_circuit > expected:
+        last_circuit = self.last_circuit_for_side(self.current_side)
+        if expected and self.current_circuit > last_circuit:
             measured = self.measured_count_for_side(self.current_side)
             if measured >= expected:
-                self.current_circuit = expected
+                self.current_circuit = last_circuit
                 self.show_circuit_results()
                 return
-            self.current_circuit = measured + 1
+            self.current_circuit = self.next_circuit_for_side(self.current_side)
 
         existing_record = self.measurement_record_for_circuit(
             self.current_side,
@@ -126,7 +153,7 @@ class MeasurementMixin:
             return
 
         if self.side_measurement_complete(self.current_side):
-            self.current_circuit = expected
+            self.current_circuit = last_circuit
             self.show_circuit_results()
             return
 
@@ -219,18 +246,19 @@ class MeasurementMixin:
         if not self.current_side:
             self.current_side = self.session.lado_molde
         if not self.current_circuit:
-            self.current_circuit = self.measured_count_for_side(self.current_side) + 1
+            self.current_circuit = self.next_circuit_for_side(self.current_side)
 
         expected = self.expected_count_for_side(self.current_side)
-        if expected and self.current_circuit > expected:
+        last_circuit = self.last_circuit_for_side(self.current_side)
+        if expected and self.current_circuit > last_circuit:
             measured = self.measured_count_for_side(self.current_side)
             if measured >= expected:
-                self.current_circuit = expected
+                self.current_circuit = last_circuit
                 self.samples = []
                 self.status_text = "Todos os circuitos pedidos ja foram medidos."
                 self.show_circuit_results()
                 return
-            self.current_circuit = measured + 1
+            self.current_circuit = self.next_circuit_for_side(self.current_side)
 
         existing_record = self.measurement_record_for_circuit(
             self.current_side,

@@ -1071,7 +1071,7 @@ class ScreensMixin:
             else self.expected_count_for_current_side()
         )
         if self.current_circuit and total:
-            return f"Medição de circuitos ({self.current_circuit}/{total})"
+            return f"Medição de circuitos ({self.circuit_progress_index()}/{total})"
         return "Medição de circuitos"
 
     def measurement_badge_text(self) -> str:
@@ -1227,6 +1227,8 @@ class ScreensMixin:
         self.option_labels = []
         self.diameter_labels = []
         self.field_value_labels = {}
+        self.circuit_inputs.setdefault("count", "")
+        self.circuit_inputs.setdefault("start", "")
 
         root = tk.Frame(self, bg=WHITE)
         root.pack(fill="both", expand=True)
@@ -1237,29 +1239,34 @@ class ScreensMixin:
         content.grid_rowconfigure(0, weight=1)
         content.grid_rowconfigure(2, weight=1)
 
-        row = tk.Frame(content, bg=WHITE)
-        row.grid(row=1, column=0)
+        form = tk.Frame(content, bg=WHITE)
+        form.grid(row=1, column=0)
 
-        tk.Label(
-            row,
-            text="Quantidade de circuitos :",
-            bg=WHITE,
-            fg=PANEL_FG,
-            font=("Arial", 22, "bold"),
-        ).pack(side="left")
-        field = tk.Frame(row, bg=GREY, width=140, height=54)
-        field.pack(side="left", padx=(14, 0))
-        field.pack_propagate(False)
-        value_label = tk.Label(
-            field,
-            text=self.input_value or " ",
-            bg=GREY,
-            fg=PANEL_FG,
-            font=("Arial", 22),
-            anchor="center",
+        side = self.session.lado_molde if self.session else ""
+        start_required = self.circuit_start_required_for_side(side)
+        if not start_required:
+            self.circuit_active_field = 0
+            self.circuit_inputs["start"] = "1"
+        if self.input_value and not self.circuit_inputs["count"]:
+            self.circuit_inputs["count"] = self.input_value
+
+        self.circuit_input_row(
+            form,
+            0,
+            "Quantidade de circuitos :",
+            self.circuit_inputs["count"],
+            "circuit_count",
+            self.circuit_active_field == 0,
         )
-        value_label.pack(fill="both", expand=True)
-        self.field_value_labels["input_value"] = value_label
+        if start_required:
+            self.circuit_input_row(
+                form,
+                1,
+                "Circuito inicial :",
+                self.circuit_inputs["start"],
+                "circuit_start",
+                self.circuit_active_field == 1,
+            )
 
         if self.status_text:
             tk.Label(
@@ -1275,11 +1282,51 @@ class ScreensMixin:
             [
                 ("Voltar atrás", "#303030", WHITE, self.go_back),
                 ("Apagar", RED, PANEL_FG, self.delete_one),
-                ("Selecionar", GREEN, PANEL_FG, self.confirm),
+                ("Selecionar", GREEN, PANEL_FG, self.select),
                 ("Confirmar", BLUE, PANEL_FG, self.confirm),
             ],
         )
         self.place_orange_badge(root, self.setup_badge_text(), font_size=12, padx=18)
+
+    def circuit_input_row(
+        self,
+        parent: tk.Widget,
+        row_index: int,
+        label_text: str,
+        value: str,
+        field_key: str,
+        active: bool,
+    ) -> None:
+        tk.Label(
+            parent,
+            text=label_text,
+            bg=WHITE,
+            fg=PANEL_FG,
+            font=("Arial", 22, "bold"),
+        ).grid(row=row_index, column=0, sticky="e", padx=(0, 14), pady=8)
+        field = tk.Frame(
+            parent,
+            bg=GREY,
+            width=140,
+            height=54,
+            highlightbackground="#087cff" if active else WHITE,
+            highlightcolor="#087cff" if active else WHITE,
+            highlightthickness=3 if active else 0,
+        )
+        field.grid(row=row_index, column=1, sticky="w", pady=8)
+        field.pack_propagate(False)
+        value_label = tk.Label(
+            field,
+            text=value or " ",
+            bg=GREY,
+            fg=PANEL_FG,
+            font=("Arial", 22),
+            anchor="center",
+        )
+        value_label.pack(fill="both", expand=True)
+        self.field_value_labels[field_key] = value_label
+        if field_key == "circuit_count":
+            self.field_value_labels["input_value"] = value_label
 
     def show_side_selection(self) -> None:
         self.screen = "SIDE"
@@ -1419,13 +1466,14 @@ class ScreensMixin:
     def show_circuit_start(self) -> None:
         if self.session is not None and self.current_side:
             total = self.expected_count_for_side(self.current_side)
-            if total and self.current_circuit > total:
+            last_circuit = self.last_circuit_for_side(self.current_side)
+            if total and self.current_circuit > last_circuit:
                 measured = self.measured_count_for_side(self.current_side)
                 if measured >= total:
-                    self.current_circuit = total
+                    self.current_circuit = last_circuit
                     self.show_circuit_results()
                     return
-                self.current_circuit = measured + 1
+                self.current_circuit = self.next_circuit_for_side(self.current_side)
 
         self.screen = "CIRCUIT_START"
         self.clear()
@@ -1856,7 +1904,7 @@ class ScreensMixin:
         ]
         self.session.lado_molde = side
         self.current_side = side
-        self.current_circuit = 1
+        self.current_circuit = self.circuit_start_for_side(side)
         self.samples = []
         self.measurement_running = False
         self.last_measurement_record = None
