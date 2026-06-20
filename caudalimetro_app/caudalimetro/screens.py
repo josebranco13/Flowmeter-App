@@ -1061,7 +1061,11 @@ class ScreensMixin:
         return "\n".join(lines)
 
     def circuit_progress_title(self) -> str:
-        total = self.expected_count_for_current_side()
+        total = (
+            self.expected_count_for_side(self.current_side)
+            if self.current_side
+            else self.expected_count_for_current_side()
+        )
         if self.current_circuit and total:
             return f"Medição de circuitos ({self.current_circuit}/{total})"
         return "Medição de circuitos"
@@ -1404,6 +1408,16 @@ class ScreensMixin:
         return label
 
     def show_circuit_start(self) -> None:
+        if self.session is not None and self.current_side:
+            total = self.expected_count_for_side(self.current_side)
+            if total and self.current_circuit > total:
+                measured = self.measured_count_for_side(self.current_side)
+                if measured >= total:
+                    self.current_circuit = total
+                    self.show_circuit_results()
+                    return
+                self.current_circuit = measured + 1
+
         self.screen = "CIRCUIT_START"
         self.clear()
         self.option_labels = []
@@ -1575,11 +1589,9 @@ class ScreensMixin:
             pady=12,
         ).pack()
 
-        next_text = (
-            "Proximo\nCircuito"
-            if self.measured_count_for_side(self.current_side) < self.expected_count_for_current_side()
-            else "Seguinte"
-        )
+        measured = self.measured_count_for_side(self.current_side)
+        expected = self.expected_count_for_side(self.current_side)
+        next_text = "Proximo\nCircuito" if measured < expected else "Seguinte"
         footer_area = tk.Frame(root, bg=WHITE)
         footer_area.pack(side="bottom", fill="x")
         tk.Label(
