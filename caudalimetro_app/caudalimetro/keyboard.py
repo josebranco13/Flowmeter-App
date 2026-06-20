@@ -626,12 +626,19 @@ class KeyboardMixin:
             self.input_value = str(self.session.pressao_entrada_bar) if self.session else ""
             self.show_pressure()
         elif self.screen == "MEASURE":
+            if self.measurement_reviewing_saved_result:
+                self.measurement_reviewing_saved_result = False
+                self.measurement_running = False
+                self.show_circuit_start()
+                return
             self.status_text = "Medição cancelada. Nenhum valor foi guardado."
             self.measurement_running = False
             self.samples = []
             self.show_circuit_start()
         elif self.screen == "MEASUREMENT_RESULT":
-            self.show_circuit_start()
+            self.measurement_reviewing_saved_result = True
+            self.measurement_running = False
+            self.show_measurement()
         elif self.screen == "CIRCUIT_RESULTS":
             if self.result_editing:
                 self.result_editing = False

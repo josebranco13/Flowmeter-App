@@ -68,6 +68,7 @@ class MeasurementMixin:
         assert self.session is not None
         side = selected_side_option.replace("Lado ", "")
         self.current_side = side
+        self.measurement_reviewing_saved_result = False
         if self.side_measurement_complete(side):
             self.current_circuit = self.expected_count_for_side(side)
             self.show_circuit_results()
@@ -81,6 +82,7 @@ class MeasurementMixin:
     def prepare_next_circuit_measurement(self) -> None:
         assert self.session is not None
         self.current_side = self.session.lado_molde or self.current_side
+        self.measurement_reviewing_saved_result = False
         if self.side_measurement_complete(self.current_side):
             self.current_circuit = self.expected_count_for_side(self.current_side)
             self.samples = []
@@ -128,6 +130,7 @@ class MeasurementMixin:
             self.show_circuit_results()
             return
 
+        self.measurement_reviewing_saved_result = False
         self.samples = []
         self.measurement_running = True
         self.status_text = ""
@@ -137,9 +140,38 @@ class MeasurementMixin:
         self.measurement_running = False
 
     def restart_current_measurement(self) -> None:
+        self.measurement_reviewing_saved_result = False
         self.samples = []
         self.measurement_running = True
         self.show_measurement()
+
+    def current_measurement_display_values(self) -> dict[str, str]:
+        if self.samples:
+            current = self.samples[-1]
+            minimum = min(self.samples)
+            average = mean(self.samples)
+            maximum = max(self.samples)
+            return {
+                "current": self.format_flow_display(current),
+                "min": self.format_flow_display(minimum),
+                "avg": self.format_flow_display(average),
+                "max": self.format_flow_display(maximum),
+            }
+
+        record = self.measurement_record_for_circuit(
+            self.current_side,
+            self.current_circuit,
+        )
+        if record is None:
+            return {}
+
+        average = record.get("caudal_medio_l_min")
+        return {
+            "current": self.format_flow_display(average),
+            "min": self.format_flow_display(record.get("caudal_min_l_min")),
+            "avg": self.format_flow_display(average),
+            "max": self.format_flow_display(record.get("caudal_max_l_min")),
+        }
 
     def simulated_flow_sample(self) -> float:
         assert self.session is not None
@@ -182,6 +214,7 @@ class MeasurementMixin:
     def finish_current_measurement(self) -> None:
         if self.session is None:
             return
+        was_running = self.measurement_running
         self.measurement_running = False
         if not self.current_side:
             self.current_side = self.session.lado_molde
@@ -198,6 +231,21 @@ class MeasurementMixin:
                 self.show_circuit_results()
                 return
             self.current_circuit = measured + 1
+
+        existing_record = self.measurement_record_for_circuit(
+            self.current_side,
+            self.current_circuit,
+        )
+        if (
+            self.measurement_reviewing_saved_result
+            and existing_record is not None
+            and not was_running
+        ):
+            self.last_measurement_record = existing_record
+            self.selected_index = 0
+            self.status_text = ""
+            self.show_measurement_result()
+            return
 
         if not self.samples:
             self.samples.append(self.simulated_flow_sample())
@@ -235,7 +283,7 @@ class MeasurementMixin:
         self.append_measurement_csv(record)
         self.save_session()
 
-        self.samples = []
+        self.measurement_reviewing_saved_result = False
         self.status_text = ""
         self.selected_index = 0
         self.show_measurement_result()

@@ -84,6 +84,7 @@ class CaudalimetroApp(
         self.current_circuit = 0
         self.samples: list[float] = []
         self.measurement_running = False
+        self.measurement_reviewing_saved_result = False
         self.last_measurement_record: dict[str, object] | None = None
         self.selected_result_index = 0
         self.result_editing = False

@@ -164,6 +164,7 @@ class UiComponentsMixin:
                 footer,
                 takefocus=0,
                 text=text,
+                command=command,
                 bg=color,
                 fg=fg,
                 activebackground=color,

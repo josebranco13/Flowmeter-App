@@ -35,6 +35,7 @@ class PersistenceMixin:
         self.current_circuit = 0
         self.samples = []
         self.measurement_running = False
+        self.measurement_reviewing_saved_result = False
         self.last_measurement_record = None
         self.selected_result_index = 0
         self.result_editing = False

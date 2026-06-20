@@ -193,6 +193,7 @@ class ScreensMixin:
                 footer,
                 takefocus=0,
                 text=text,
+                command=command,
                 bg=bg,
                 fg=fg,
                 activebackground=bg,
@@ -765,6 +766,7 @@ class ScreensMixin:
                 footer,
                 takefocus=0,
                 text=text,
+                command=command,
                 bg=bg,
                 fg=fg,
                 activebackground=bg,
@@ -933,6 +935,7 @@ class ScreensMixin:
                 footer,
                 takefocus=0,
                 text=text,
+                command=command,
                 bg=bg,
                 fg=fg,
                 activebackground=bg,
@@ -958,6 +961,7 @@ class ScreensMixin:
                 footer,
                 takefocus=0,
                 text=text,
+                command=command,
                 bg=bg,
                 fg=fg,
                 activebackground=bg,
@@ -1363,6 +1367,11 @@ class ScreensMixin:
                 font=("Arial", 20),
             ).grid(row=2, column=col, sticky="e", padx=(0, 10))
             self.measure_labels[key] = self.measure_value_box(form, 2, col + 1, 96, "")
+
+        for key, value in self.current_measurement_display_values().items():
+            label = self.measure_labels.get(key)
+            if label is not None:
+                label.configure(text=value)
 
         self.build_simple_footer(
             root,
