@@ -16,27 +16,6 @@ class FlowSensorError(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class FlowReading:
-    """
-    Representa uma leitura atual do caudalímetro.
-
-    flow_l_min:
-        Caudal filtrado, recomendado para apresentar na interface.
-
-    instantaneous_flow_l_min:
-        Caudal calculado diretamente através dos dois últimos impulsos.
-
-    total_litres:
-        Volume total medido desde o último reset.
-
-    total_pulses:
-        Número total de impulsos recebidos desde o último reset.
-
-    last_pulse_age_seconds:
-        Tempo decorrido desde o último impulso.
-
-    is_flowing:
-        Indica se foram recebidos impulsos recentemente.
-    """
 
     flow_l_min: float
     instantaneous_flow_l_min: float
@@ -47,15 +26,6 @@ class FlowReading:
 
 
 class YFS201Sensor:
-    """
-    Leitor em tempo real para o caudalímetro YF-S201.
-
-    A callback GPIO é executada imediatamente sempre que é recebido
-    um impulso do sensor.
-
-    A interface gráfica deve consultar get_reading() através do after()
-    do Tkinter. A callback GPIO não deve modificar diretamente widgets.
-    """
 
     def __init__(
         self,
@@ -66,37 +36,7 @@ class YFS201Sensor:
         minimum_pulse_interval: float = 0.002,
         active_high: bool = True,
     ) -> None:
-        """
-        Inicializa o sensor.
-
-        Args:
-            gpio_pin:
-                Número BCM do GPIO utilizado.
-                GPIO17 corresponde ao pino físico 11.
-
-            pulses_per_litre:
-                Fator de calibração do sensor.
-                O valor nominal do YF-S201 é 450 impulsos por litro.
-
-            zero_flow_timeout:
-                Tempo sem impulsos após o qual o caudal passa para zero.
-
-            smoothing_factor:
-                Intensidade do filtro exponencial.
-                Deve estar entre 0 e 1.
-
-                Valores baixos produzem uma leitura mais estável.
-                Valores altos respondem mais rapidamente às alterações.
-
-            minimum_pulse_interval:
-                Intervalo mínimo aceite entre impulsos, em segundos.
-                Ajuda a rejeitar ruído elétrico sem utilizar debounce
-                mecânico.
-
-            active_high:
-                True quando o impulso é considerado ativo em nível alto.
-        """
-
+    
         if DigitalInputDevice is None:
             raise FlowSensorError(
                 "A biblioteca gpiozero não está instalada. "
@@ -160,12 +100,6 @@ class YFS201Sensor:
         self._input.when_activated = self._pulse_received
 
     def _pulse_received(self) -> None:
-        """
-        Callback executada quando é recebido um impulso.
-
-        O caudal é atualizado imediatamente com base no tempo entre
-        o impulso atual e o impulso anterior.
-        """
 
         current_time_ns = monotonic_ns()
 
@@ -211,12 +145,6 @@ class YFS201Sensor:
                 )
 
     def get_reading(self) -> FlowReading:
-        """
-        Devolve imediatamente a leitura mais recente.
-
-        Este método não espera por novos impulsos e não bloqueia
-        a interface gráfica.
-        """
 
         current_time_ns = monotonic_ns()
 
@@ -265,33 +193,18 @@ class YFS201Sensor:
         )
 
     def get_flow_l_min(self) -> float:
-        """
-        Devolve apenas o caudal filtrado em litros por minuto.
-        """
 
         return self.get_reading().flow_l_min
 
     def get_instantaneous_flow_l_min(self) -> float:
-        """
-        Devolve o caudal calculado diretamente através dos dois
-        últimos impulsos.
-        """
 
         return self.get_reading().instantaneous_flow_l_min
 
     def get_total_litres(self) -> float:
-        """
-        Devolve o volume total medido desde o último reset.
-        """
 
         return self.get_reading().total_litres
 
     def reset(self) -> None:
-        """
-        Reinicia os contadores e os valores de caudal.
-
-        Deve ser chamado quando começa uma nova medição.
-        """
 
         with self._lock:
             self._last_pulse_time_ns = None
@@ -301,9 +214,6 @@ class YFS201Sensor:
             self._has_valid_flow_reading = False
 
     def close(self) -> None:
-        """
-        Termina a leitura e liberta o GPIO.
-        """
 
         with self._lock:
             if self._closed:
