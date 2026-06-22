@@ -198,15 +198,30 @@ class ScreensMixin:
             justify="center",
         ).pack(side="top", pady=(10, 0))
 
-        self.build_login_footer(root)
+        self.build_login_footer(
+            root,
+            black_text="Voltar atrás",
+            black_command=self.go_back,
+            red_text="-",
+            red_command=self.no_action,
+        )
 
-    def build_login_footer(self, parent: tk.Widget) -> None:
+    def build_login_footer(
+        self,
+        parent: tk.Widget,
+        black_text: str = "Apagar tudo",
+        black_command=None,
+        red_text: str = "Apagar",
+        red_command=None,
+    ) -> None:
         footer = tk.Frame(parent, bg=WHITE)
         footer.pack(side="bottom", fill="x")
 
+        black_command = black_command or self.delete_all
+        red_command = red_command or self.delete_one
         buttons = [
-            ("Apagar tudo", "#303030", WHITE, self.delete_all),
-            ("Apagar", RED, PANEL_FG, self.delete_one),
+            (black_text, "#303030", WHITE, black_command),
+            (red_text, RED, PANEL_FG, red_command),
             ("Selecionar", GREEN, PANEL_FG, self.select),
             ("Confirmar", BLUE, PANEL_FG, self.confirm),
         ]
