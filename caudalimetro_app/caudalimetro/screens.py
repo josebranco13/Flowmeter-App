@@ -168,13 +168,35 @@ class ScreensMixin:
         root = tk.Frame(self, bg=WHITE)
         root.pack(fill="both", expand=True)
 
+        content = tk.Frame(root, bg=WHITE)
+        content.pack(fill="both", expand=True)
+
         tk.Label(
-            root,
+            content,
             text="Créditos",
             bg=WHITE,
             fg=PANEL_FG,
             font=("Arial", 18, "bold"),
-        ).pack(side="top", anchor="nw", padx=20, pady=20)
+        ).pack(side="top", pady=20)
+
+        tk.Label(
+            content,
+            text=(
+                "Projeto desenvolvido por:\n\n"
+                "José Branco\n"
+                "Rodrigo Lourenço\n\n\n"
+                "Orientadores:\n\n"
+                "Prof. Filipe Neves\n"
+                "Prof. Paulo Costa\n"
+                "Prof. João Galvão\n\n\n"
+                "Colaboração técnica:\n\n"
+                "Eng. João Godinho"
+            ),
+            bg=WHITE,
+            fg=PANEL_FG,
+            font=("Arial", 16),
+            justify="center",
+        ).pack(side="top", pady=(10, 0))
 
         self.build_login_footer(root)
 
