@@ -1779,9 +1779,20 @@ class ScreensMixin:
         records = sorted(self.measurements_for_side(side), key=lambda item: item["circuito"])
         rows = tk.Frame(results_content, bg=WHITE)
         rows.pack()
-        for index, item in enumerate(records[:6]):
-            circuit = item.get("circuito", index + 1)
-            editing = self.result_editing and index == self.selected_result_index
+
+        max_visible = 6
+        if len(records) > max_visible:
+            start = self.selected_result_index - (max_visible // 2)
+            start = max(0, min(start, len(records) - max_visible))
+            end = start + max_visible
+        else:
+            start = 0
+            end = len(records)
+
+        for row_index, item_index in enumerate(range(start, end)):
+            item = records[item_index]
+            circuit = item.get("circuito", item_index + 1)
+            editing = self.result_editing and item_index == self.selected_result_index
             value = (
                 self.result_edit_display_value()
                 if editing
@@ -1793,13 +1804,13 @@ class ScreensMixin:
                 bg=WHITE,
                 fg=PANEL_FG,
                 font=("Arial", 24),
-            ).grid(row=index, column=0, sticky="e", padx=(0, 14), pady=6)
+            ).grid(row=row_index, column=0, sticky="e", padx=(0, 14), pady=6)
             highlighted = bool(item.get("destacado"))
-            selected = index == self.selected_result_index
+            selected = item_index == self.selected_result_index
             bg = RED if highlighted else GREY
             value_label = self.result_box(
                 rows,
-                index,
+                row_index,
                 1,
                 220,
                 value,
@@ -1816,13 +1827,23 @@ class ScreensMixin:
                 bg=WHITE,
                 fg=PANEL_FG,
                 font=("Arial", 24),
-            ).grid(row=index, column=2, sticky="w", padx=(14, 0), pady=6)
+            ).grid(row=row_index, column=2, sticky="w", padx=(14, 0), pady=6)
 
-        if len(records) > 6:
+        if len(records) > max_visible:
             scroll = tk.Frame(content, bg="#d7d7d7", width=26, height=220)
             scroll.place(relx=0.965, rely=0.36, anchor="ne")
             scroll.pack_propagate(False)
-            tk.Frame(scroll, bg="#555555", width=10, height=150).pack(pady=10)
+
+            visible_fraction = max(0.12, min(1.0, max_visible / len(records)))
+            max_start = max(len(records) - max_visible, 1)
+            thumb_top = (start / max_start) * (1.0 - visible_fraction)
+            tk.Frame(scroll, bg="#555555").place(
+                relx=0.5,
+                rely=thumb_top,
+                anchor="n",
+                relwidth=0.5,
+                relheight=visible_fraction,
+            )
 
         if self.status_text:
             tk.Label(
