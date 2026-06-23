@@ -165,6 +165,7 @@ class MeasurementMixin:
 
     def stop_current_measurement(self) -> None:
         self.measurement_running = False
+        self.show_measurement()
 
     def restart_current_measurement(self) -> None:
         self.measurement_reviewing_saved_result = False

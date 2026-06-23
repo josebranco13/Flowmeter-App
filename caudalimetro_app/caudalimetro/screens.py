@@ -1457,8 +1457,20 @@ class ScreensMixin:
             if label is not None:
                 label.configure(text=value)
 
+        footer_area = tk.Frame(root, bg=WHITE)
+        footer_area.pack(side="bottom", fill="x")
+
+        if not self.measurement_running and self.samples:
+            tk.Label(
+                footer_area,
+                text="Medição parada.",
+                bg=WHITE,
+                fg=RED,
+                font=("Arial", 13, "bold"),
+            ).pack(fill="x", pady=(0, 4))
+
         self.build_simple_footer(
-            root,
+            footer_area,
             [
                 ("Voltar atrás", "#303030", WHITE, self.go_back),
                 ("Recomeçar", RED, PANEL_FG, self.restart_current_measurement),
