@@ -346,8 +346,8 @@ class ScreensMixin:
             delete_command=self.remove_selected_admin_operator,
             select_text="Adicionar Operador",
             select_command=self.show_admin_add_operator,
-            confirm_text="Sair",
-            confirm_command=self.logout_to_login,
+            confirm_text="Resetar Password",
+            confirm_command=self.reset_selected_admin_operator_password,
             center_title=True,
         )
         panel.configure(bg=WHITE)
@@ -574,6 +574,98 @@ class ScreensMixin:
             self.show_admin_operators()
         else:
             self.show_admin_add_operator()
+
+    def reset_selected_admin_operator_password(self) -> None:
+        operators = self.managed_operator_options()
+        if not operators:
+            self.status_text = "Nao existem operadores para resetar."
+            self.show_admin_operators()
+            return
+
+        self.selected_admin_operator_index = min(
+            self.selected_admin_operator_index,
+            len(operators) - 1,
+        )
+        self.admin_reset_operator_name = operators[self.selected_admin_operator_index]
+        self.admin_reset_operator_pin = ""
+        self.status_text = ""
+        self.show_admin_reset_password()
+
+    def show_admin_reset_password(self) -> None:
+        self.screen = "ADMIN_RESET_PASSWORD"
+        reset_status_text = self.status_text
+        self.status_text = ""
+        panel = self.build_base(
+            "Resetar password",
+            "Admin",
+            back_text="Voltar",
+            back_command=self.cancel_admin_reset_password,
+            delete_text="Apagar",
+            delete_command=self.delete_one,
+            select_text="Guardar",
+            select_command=self.save_admin_reset_password,
+            confirm_text="Sair",
+            confirm_command=self.cancel_admin_reset_password,
+        )
+        self.status_text = reset_status_text
+
+        form = tk.Frame(panel, bg=PANEL_BG)
+        form.pack(expand=True)
+        self.admin_add_field_row(
+            form,
+            0,
+            "Operador:",
+            self.admin_reset_operator_name,
+            False,
+            "admin_reset_operator_name",
+        )
+        self.admin_add_field_row(
+            form,
+            1,
+            "PIN:",
+            "●" * len(self.admin_reset_operator_pin),
+            True,
+            "admin_reset_operator_pin",
+        )
+
+        if reset_status_text:
+            tk.Label(
+                panel,
+                text=reset_status_text,
+                bg=PANEL_BG,
+                fg="#c48b00",
+                font=("Arial", 12, "bold"),
+            ).pack(fill="x", padx=60, pady=(0, 18))
+
+    def refresh_admin_reset_field(self) -> None:
+        if not self.update_field_value(
+            "admin_reset_operator_pin",
+            "●" * len(self.admin_reset_operator_pin),
+        ):
+            self.show_admin_reset_password()
+
+    def cancel_admin_reset_password(self) -> None:
+        self.admin_reset_operator_name = ""
+        self.admin_reset_operator_pin = ""
+        self.status_text = ""
+        self.show_admin_operators()
+
+    def save_admin_reset_password(self) -> None:
+        success, message = self.reset_operator_password(
+            self.admin_reset_operator_name,
+            self.admin_reset_operator_pin,
+        )
+        self.status_text = message
+        if success:
+            reset_operator = self.normalize_operator_name(self.admin_reset_operator_name)
+            self.admin_reset_operator_name = ""
+            self.admin_reset_operator_pin = ""
+            operators = self.managed_operator_options()
+            if reset_operator in operators:
+                self.selected_admin_operator_index = operators.index(reset_operator)
+            self.show_admin_operators()
+        else:
+            self.show_admin_reset_password()
 
     def remove_selected_admin_operator(self) -> None:
         operators = self.managed_operator_options()

@@ -171,6 +171,8 @@ class KeyboardMixin:
         elif self.screen == "ADMIN_ADD_OPERATOR":
             self.admin_add_active_field = (self.admin_add_active_field + delta) % 2
             self.show_admin_add_operator()
+        elif self.screen == "ADMIN_RESET_PASSWORD":
+            return
         elif self.screen == "ADMIN_REMOVE_CONFIRM":
             return
 
@@ -267,6 +269,12 @@ class KeyboardMixin:
             elif char.isdigit():
                 self.admin_new_operator_pin = (self.admin_new_operator_pin + char)[:4]
             self.refresh_admin_add_field()
+        elif self.screen == "ADMIN_RESET_PASSWORD":
+            if char.isdigit():
+                self.admin_reset_operator_pin = (
+                    self.admin_reset_operator_pin + char
+                )[:4]
+                self.refresh_admin_reset_field()
 
     def delete_one(self) -> None:
         if self.screen == "LOGIN":
@@ -313,6 +321,9 @@ class KeyboardMixin:
             else:
                 self.admin_new_operator_pin = self.admin_new_operator_pin[:-1]
             self.refresh_admin_add_field()
+        elif self.screen == "ADMIN_RESET_PASSWORD":
+            self.admin_reset_operator_pin = self.admin_reset_operator_pin[:-1]
+            self.refresh_admin_reset_field()
         elif self.screen == "ADMIN_REMOVE_CONFIRM":
             self.cancel_admin_operator_removal()
 
@@ -348,6 +359,9 @@ class KeyboardMixin:
             else:
                 self.admin_new_operator_pin = ""
             self.refresh_admin_add_field()
+        elif self.screen == "ADMIN_RESET_PASSWORD":
+            self.admin_reset_operator_pin = ""
+            self.refresh_admin_reset_field()
         elif self.screen == "ADMIN_REMOVE_CONFIRM":
             self.cancel_admin_operator_removal()
 
@@ -418,6 +432,10 @@ class KeyboardMixin:
 
         if self.screen == "ADMIN_ADD_OPERATOR":
             self.save_admin_operator()
+            return
+
+        if self.screen == "ADMIN_RESET_PASSWORD":
+            self.save_admin_reset_password()
             return
 
         if self.screen == "ADMIN_REMOVE_CONFIRM":
@@ -646,10 +664,13 @@ class KeyboardMixin:
             self.show_send_review()
 
         elif self.screen == "ADMIN_OPERATORS":
-            self.logout_to_login()
+            self.reset_selected_admin_operator_password()
 
         elif self.screen == "ADMIN_ADD_OPERATOR":
             self.cancel_admin_add_operator()
+
+        elif self.screen == "ADMIN_RESET_PASSWORD":
+            self.cancel_admin_reset_password()
 
         elif self.screen == "ADMIN_REMOVE_CONFIRM":
             return
@@ -730,6 +751,8 @@ class KeyboardMixin:
             self.show_admin_menu()
         elif self.screen == "ADMIN_ADD_OPERATOR":
             self.cancel_admin_add_operator()
+        elif self.screen == "ADMIN_RESET_PASSWORD":
+            self.cancel_admin_reset_password()
         elif self.screen == "ADMIN_REMOVE_CONFIRM":
             self.cancel_admin_operator_removal()
         elif self.screen == "CREDITS":

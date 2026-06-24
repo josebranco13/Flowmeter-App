@@ -12,6 +12,7 @@ from uuid import uuid4
 
 from .database import (
     authenticate_user,
+    change_user_password,
     create_user,
     delete_user,
     get_usernames,
@@ -50,6 +51,8 @@ class PersistenceMixin:
         self.admin_new_operator_name = ""
         self.admin_new_operator_pin = ""
         self.admin_add_active_field = 0
+        self.admin_reset_operator_name = ""
+        self.admin_reset_operator_pin = ""
         self.selected_admin_operator_index = 0
         self.pending_admin_operator_removal = ""
         self.admin_operator_labels = []
@@ -134,6 +137,21 @@ class PersistenceMixin:
         if success:
             self.load_operator_options()
 
+        return success, message
+
+    def reset_operator_password(self, operator: str, pin: str) -> tuple[bool, str]:
+        name = self.normalize_operator_name(operator)
+        if not name:
+            return False, "Selecione um operador."
+        pin = pin.strip()
+        if not pin.isdigit() or len(pin) != 4:
+            return False, "Indique um PIN com 4 digitos."
+        if name == "ADMIN":
+            return False, "Password do ADMIN nao pode ser alterada aqui."
+
+        success, message = change_user_password(name, pin)
+        if success:
+            self.load_operator_options()
         return success, message
 
     @staticmethod

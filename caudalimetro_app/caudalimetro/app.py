@@ -57,6 +57,8 @@ class CaudalimetroApp(
         self.admin_new_operator_name = ""
         self.admin_new_operator_pin = ""
         self.admin_add_active_field = 0
+        self.admin_reset_operator_name = ""
+        self.admin_reset_operator_pin = ""
         self.selected_admin_operator_index = 0
         self.pending_admin_operator_removal = ""
         self.admin_operator_labels: list[tk.Label] = []
