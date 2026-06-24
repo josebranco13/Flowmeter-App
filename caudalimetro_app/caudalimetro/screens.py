@@ -4,6 +4,7 @@ import tkinter as tk
 from typing import Any
 
 from .config import (
+    APP_HEIGHT,
     BLUE,
     DIAMETER_LABELS,
     GREEN,
@@ -289,12 +290,21 @@ class ScreensMixin:
         return list(enumerate(operators[start:end], start=start))
 
     def admin_operator_visible_count(self) -> int:
-        height = max(self.winfo_height(), self.winfo_screenheight(), 480)
+        height = self.winfo_height()
+        if height <= 1:
+            height = APP_HEIGHT
+
         if height >= 900:
-            return 12
-        if height >= 700:
-            return 10
-        return 8
+            count = 12
+        elif height >= 700:
+            count = 8
+        else:
+            count = 6
+
+        if self.status_text:
+            count -= 1
+
+        return max(4, count)
 
     def show_admin_menu(self) -> None:
         self.screen = "ADMIN_MENU"

@@ -65,21 +65,6 @@ class UiComponentsMixin:
                     font=("Arial", 11),
                 ).pack(side="right")
 
-        body = tk.Frame(root, bg=WHITE)
-        body.pack(fill="both", expand=True)
-
-        panel = tk.Frame(body, bg=PANEL_BG, bd=0, highlightthickness=0)
-        panel.pack(side="left", fill="both", expand=True)
-
-        if self.status_text:
-            tk.Label(
-                root,
-                text=self.status_text,
-                bg=WHITE,
-                fg="#c48b00",
-                font=("Arial", 12, "bold"),
-            ).pack(fill="x", pady=(0, 4))
-
         self.build_footer(
             root,
             confirm_text=confirm_text,
@@ -91,6 +76,21 @@ class UiComponentsMixin:
             select_command=select_command,
             confirm_command=confirm_command,
         )
+
+        if self.status_text:
+            tk.Label(
+                root,
+                text=self.status_text,
+                bg=WHITE,
+                fg="#c48b00",
+                font=("Arial", 12, "bold"),
+            ).pack(side="bottom", fill="x", pady=(0, 4))
+
+        body = tk.Frame(root, bg=WHITE)
+        body.pack(fill="both", expand=True)
+
+        panel = tk.Frame(body, bg=PANEL_BG, bd=0, highlightthickness=0)
+        panel.pack(side="left", fill="both", expand=True)
         return panel
 
     def build_keypad_help(self, parent: tk.Widget) -> tk.Frame:
