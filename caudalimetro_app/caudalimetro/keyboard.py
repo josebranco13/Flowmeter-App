@@ -484,10 +484,6 @@ class KeyboardMixin:
                 self.status_text = "Selecione um operador válido."
                 self.show_login()
                 return
-            if self.operator_expected_pin(self.operator_id) is None:
-                self.status_text = "Operador sem PIN configurado."
-                self.show_login()
-                return
             if not self.operator_pin_matches(self.operator_id, self.pin):
                 self.status_text = "PIN incorreto para este operador."
                 self.pin = ""

@@ -9,11 +9,10 @@ from .config import (
     DATA_DIR,
     DIAMETER_OPTIONS,
     MENU_OPTIONS,
-    OPERATOR_OPTIONS,
-    OPERATOR_PASSWORDS,
     SENT_DIR,
     SESSIONS_DIR,
 )
+from .database import get_usernames, initialize_database
 from .keyboard import KeyboardMixin
 from .measurement import MeasurementMixin
 from .models import MeasurementSession
@@ -42,6 +41,7 @@ class CaudalimetroApp(
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
         SENT_DIR.mkdir(parents=True, exist_ok=True)
+        initialize_database()
 
         self.screen = ""
         self.operator_id = ""
@@ -49,8 +49,7 @@ class CaudalimetroApp(
         self.active_field = 0
         self.selected_index = 0
         self.send_review_first_row = 0
-        self.operator_options = OPERATOR_OPTIONS.copy()
-        self.operator_passwords = OPERATOR_PASSWORDS.copy()
+        self.operator_options = get_usernames()
         self.operator_list_open = False
         self.operator_selected_index = 0
         self.operator_visible_indices: list[int] = []

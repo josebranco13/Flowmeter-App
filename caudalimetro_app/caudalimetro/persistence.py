@@ -10,12 +10,15 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from .database import (
+    authenticate_user,
+    create_user,
+    delete_user,
+    get_usernames,
+)
 from .config import (
     CSV_PATH,
     DIAMETER_LABELS,
-    OPERATOR_OPTIONS,
-    OPERATOR_PASSWORDS,
-    OPERATORS_PATH,
     SENT_DIR,
     SESSIONS_DIR,
 )
@@ -88,20 +91,8 @@ class PersistenceMixin:
     def normalize_operator_name(self, value: str) -> str:
         return value.strip().upper()
 
-    def load_operator_passwords(self) -> None:
-        self.operator_passwords = {
-            self.normalize_operator_name(operator): str(pin).zfill(4)
-            for operator, pin in OPERATOR_PASSWORDS.items()
-        }
-
-    def operator_expected_pin(self, operator: str) -> str | None:
-        return self.operator_passwords.get(self.normalize_operator_name(operator))
-
     def operator_pin_matches(self, operator: str, pin: str) -> bool:
-        expected_pin = self.operator_expected_pin(operator)
-        if expected_pin is None:
-            return False
-        return pin == expected_pin
+        return authenticate_user(operator, pin)
 
     def sorted_operator_options(self, operators: list[str]) -> list[str]:
         normalized = {
@@ -113,45 +104,7 @@ class PersistenceMixin:
         return sorted(normalized, key=self.operator_sort_key)
 
     def load_operator_options(self) -> None:
-        self.load_operator_passwords()
-        operators = OPERATOR_OPTIONS.copy()
-        if OPERATORS_PATH.exists():
-            try:
-                with OPERATORS_PATH.open("r", encoding="utf-8") as f:
-                    data = json.load(f)
-            except (OSError, json.JSONDecodeError):
-                data = []
-
-            if isinstance(data, list):
-                operators = [str(operator) for operator in data]
-            elif isinstance(data, dict):
-                stored_operators = data.get("operators")
-                if isinstance(stored_operators, list):
-                    operators = [str(operator) for operator in stored_operators]
-
-                stored_passwords = data.get("passwords")
-                if isinstance(stored_passwords, dict):
-                    for operator, pin in stored_passwords.items():
-                        name = self.normalize_operator_name(str(operator))
-                        if name:
-                            self.operator_passwords[name] = str(pin).zfill(4)
-
-        self.operator_options = self.sorted_operator_options(operators)
-        self.save_operator_options()
-
-    def save_operator_options(self) -> None:
-        OPERATORS_PATH.parent.mkdir(parents=True, exist_ok=True)
-        passwords = {
-            operator: self.operator_passwords[operator]
-            for operator in self.operator_options
-            if operator in self.operator_passwords
-        }
-        data = {
-            "operators": self.operator_options,
-            "passwords": passwords,
-        }
-        with OPERATORS_PATH.open("w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        self.operator_options = get_usernames()
 
     def managed_operator_options(self) -> list[str]:
         return [operator for operator in self.operator_options if operator != "ADMIN"]
@@ -165,29 +118,23 @@ class PersistenceMixin:
             return False, "Indique um PIN com 4 digitos."
         if name == "ADMIN":
             return False, "ADMIN já existe."
-        if name in self.operator_options:
-            if name not in self.operator_passwords:
-                self.operator_passwords[name] = pin
-                self.save_operator_options()
-                return True, f"PIN do operador {name} configurado."
-            return False, f"Operador {name} já existe."
+        
+        success, message = create_user(name, pin)
 
-        self.operator_passwords[name] = pin
-        self.operator_options = self.sorted_operator_options([*self.operator_options, name])
-        self.save_operator_options()
-        return True, f"Operador {name} criado."
+        if success:
+            self.load_operator_options()
+        
+        return success, message
 
     def remove_operator(self, operator: str) -> tuple[bool, str]:
         name = self.normalize_operator_name(operator)
-        if name == "ADMIN":
-            return False, "ADMIN não pode ser removido."
-        if name not in self.operator_options:
-            return False, "Operador não encontrado."
+        
+        success, message = delete_user(name)
 
-        self.operator_options = [item for item in self.operator_options if item != name]
-        self.operator_passwords.pop(name, None)
-        self.save_operator_options()
-        return True, f"Operador {name} removido."
+        if success:
+            self.load_operator_options()
+
+        return success, message
 
     @staticmethod
     def operator_sort_key(operator: str) -> tuple[int, str, str]:
