@@ -827,6 +827,8 @@ class ScreensMixin:
         root = tk.Frame(self, bg=WHITE)
         root.pack(fill="both", expand=True)
 
+        self.build_mold_footer(root)
+
         content = tk.Frame(root, bg=WHITE)
         content.pack(fill="both", expand=True)
         content.grid_columnconfigure(0, weight=1)
@@ -876,7 +878,6 @@ class ScreensMixin:
                 font=("Arial", 12, "bold"),
             ).grid(row=2, column=0, sticky="n", pady=12)
 
-        self.build_mold_footer(root)
         selected_option = tk.Label(
             root,
             text=self.selected_menu_option or "Medir caudal",
@@ -928,6 +929,8 @@ class ScreensMixin:
 
         root = tk.Frame(self, bg=WHITE)
         root.pack(fill="both", expand=True)
+
+        self.build_mold_side_footer(root)
 
         content = tk.Frame(root, bg=WHITE)
         content.pack(fill="both", expand=True)
@@ -1045,7 +1048,6 @@ class ScreensMixin:
                 font=("Arial", 12, "bold"),
             ).grid(row=2, column=0, sticky="n", pady=12)
 
-        self.build_mold_side_footer(root)
         mold_badge = tk.Label(
             root,
             text=(self.session.molde if self.session else ""),
