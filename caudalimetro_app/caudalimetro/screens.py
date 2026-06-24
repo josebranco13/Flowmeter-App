@@ -1094,8 +1094,12 @@ class ScreensMixin:
         buttons: list[tuple[str, str, str, object]],
         font_size: int = 12,
     ) -> None:
+        existing_children = parent.winfo_children()
         footer = tk.Frame(parent, bg=WHITE)
-        footer.pack(side="bottom", fill="x")
+        pack_options = {"side": "bottom", "fill": "x"}
+        if existing_children:
+            pack_options["before"] = existing_children[0]
+        footer.pack(**pack_options)
         for text, bg, fg, command in buttons:
             tk.Button(
                 footer,
@@ -1856,6 +1860,23 @@ class ScreensMixin:
         label.pack(fill="both", expand=True)
         return label
 
+    def circuit_results_visible_row_count(self) -> int:
+        height = self.winfo_height()
+        if height <= 1:
+            height = APP_HEIGHT
+
+        if height >= 900:
+            count = 8
+        elif height >= 700:
+            count = 6
+        else:
+            count = 4
+
+        if self.status_text:
+            count -= 1
+
+        return max(3, count)
+
     def show_circuit_results(self) -> None:
         self.screen = "CIRCUIT_RESULTS"
         self.clear()
@@ -1865,6 +1886,22 @@ class ScreensMixin:
 
         root = tk.Frame(self, bg=WHITE)
         root.pack(fill="both", expand=True)
+
+        self.build_simple_footer(
+            root,
+            [
+                ("Voltar atrás", "#303030", WHITE, self.go_back),
+                ("Medir\nNovamente", RED, PANEL_FG, self.remeasure_selected_result),
+                (
+                    "Guardar" if self.result_editing else "Editar",
+                    GREEN,
+                    PANEL_FG,
+                    self.save_selected_result_edit if self.result_editing else self.edit_selected_result,
+                ),
+                ("Confirmar", BLUE, PANEL_FG, self.confirm),
+            ],
+            font_size=14,
+        )
 
         content = tk.Frame(root, bg=WHITE)
         content.pack(fill="both", expand=True)
@@ -1885,10 +1922,18 @@ class ScreensMixin:
         ).pack(pady=(0, 26))
 
         records = sorted(self.measurements_for_side(side), key=lambda item: item["circuito"])
-        rows = tk.Frame(results_content, bg=WHITE)
-        rows.pack()
+        if records:
+            self.selected_result_index = max(
+                0,
+                min(self.selected_result_index, len(records) - 1),
+            )
 
-        max_visible = 6
+        table_area = tk.Frame(results_content, bg=WHITE)
+        table_area.pack()
+        rows = tk.Frame(table_area, bg=WHITE)
+        rows.pack(side="left")
+
+        max_visible = self.circuit_results_visible_row_count()
         if len(records) > max_visible:
             start = self.selected_result_index - (max_visible // 2)
             start = max(0, min(start, len(records) - max_visible))
@@ -1937,13 +1982,14 @@ class ScreensMixin:
                 font=("Arial", 24),
             ).grid(row=row_index, column=2, sticky="w", padx=(14, 0), pady=6)
 
-        if len(records) > max_visible:
-            scroll = tk.Frame(content, bg="#d7d7d7", width=26, height=220)
-            scroll.place(relx=0.965, rely=0.36, anchor="ne")
+        visible_count = max(end - start, 1)
+        if len(records) > visible_count:
+            scroll = tk.Frame(table_area, bg="#d7d7d7", width=26)
+            scroll.pack(side="left", fill="y", padx=(28, 0))
             scroll.pack_propagate(False)
 
-            visible_fraction = max(0.12, min(1.0, max_visible / len(records)))
-            max_start = max(len(records) - max_visible, 1)
+            visible_fraction = max(0.12, min(1.0, visible_count / len(records)))
+            max_start = max(len(records) - visible_count, 1)
             thumb_top = (start / max_start) * (1.0 - visible_fraction)
             tk.Frame(scroll, bg="#555555").place(
                 relx=0.5,
@@ -1961,22 +2007,6 @@ class ScreensMixin:
                 fg=RED,
                 font=("Arial", 13, "bold"),
             ).grid(row=2, column=0, pady=(12, 0))
-
-        self.build_simple_footer(
-            root,
-            [
-                ("Voltar atrás", "#303030", WHITE, self.go_back),
-                ("Medir\nNovamente", RED, PANEL_FG, self.remeasure_selected_result),
-                (
-                    "Guardar" if self.result_editing else "Editar",
-                    GREEN,
-                    PANEL_FG,
-                    self.save_selected_result_edit if self.result_editing else self.edit_selected_result,
-                ),
-                ("Confirmar", BLUE, PANEL_FG, self.confirm),
-            ],
-            font_size=14,
-        )
 
     def show_side_complete(self) -> None:
         self.screen = "SIDE_COMPLETE"
