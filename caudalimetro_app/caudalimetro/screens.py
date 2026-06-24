@@ -4,7 +4,6 @@ import tkinter as tk
 from typing import Any
 
 from .config import (
-    APP_BG,
     BLUE,
     DIAMETER_LABELS,
     GREEN,
@@ -27,9 +26,11 @@ class ScreensMixin:
 
         root = tk.Frame(self, bg=WHITE)
         root.pack(fill="both", expand=True)
+        root.grid_columnconfigure(0, weight=1)
+        root.grid_rowconfigure(0, weight=1)
 
         content = tk.Frame(root, bg=WHITE)
-        content.pack(fill="both", expand=True)
+        content.grid(row=0, column=0, sticky="nsew")
         content.grid_columnconfigure(0, weight=1)
         content.grid_rowconfigure(1, weight=1)
 
@@ -90,28 +91,29 @@ class ScreensMixin:
             ).grid(row=2, column=0, pady=14, sticky="n")
 
         action_area = tk.Frame(root, bg=WHITE)
-        action_area.pack(side="bottom", fill="x")
+        action_area.grid(row=1, column=0, sticky="ew")
 
-        credits_active = self.login_active_field == 2
-        credits_container = tk.Frame(
-            action_area,
-            width=310,
-            height=48,
-            highlightbackground="#087cff" if credits_active else WHITE,
-            highlightcolor="#087cff",
-            highlightthickness=3 if credits_active else 0,
-        )
-        credits_container.pack(pady=(0, 5))
-        credits_container.pack_propagate(False)
+        if not self.operator_list_open:
+            credits_active = self.login_active_field == 2
+            credits_container = tk.Frame(
+                action_area,
+                width=310,
+                height=48,
+                highlightbackground="#087cff" if credits_active else WHITE,
+                highlightcolor="#087cff",
+                highlightthickness=3 if credits_active else 0,
+            )
+            credits_container.pack(pady=(0, 5))
+            credits_container.pack_propagate(False)
 
-        tk.Button(
-            credits_container,
-            takefocus=0,
-            text="Créditos",
-            bg="#303030",
-            fg=WHITE,
-            font=("Arial", 14),
-        ).pack(fill="both", expand=True)
+            tk.Button(
+                credits_container,
+                takefocus=0,
+                text="Créditos",
+                bg="#303030",
+                fg=WHITE,
+                font=("Arial", 14),
+            ).pack(fill="both", expand=True)
 
         self.build_login_footer(action_area)
 
@@ -692,28 +694,11 @@ class ScreensMixin:
 
         operator = self.pending_admin_operator_removal or "-"
 
-        root = tk.Frame(self, bg=APP_BG)
+        root = tk.Frame(self, bg=PANEL_BG)
         root.pack(fill="both", expand=True)
 
-        header = tk.Frame(root, bg=APP_BG)
-        header.pack(fill="x", padx=22, pady=(16, 8))
-        tk.Label(
-            header,
-            text="Remover operador",
-            bg=APP_BG,
-            fg=WHITE,
-            font=("Arial", 22, "bold"),
-        ).pack(side="left")
-        tk.Label(
-            header,
-            text="Admin",
-            bg=APP_BG,
-            fg="#cfd6df",
-            font=("Arial", 11),
-        ).pack(side="right")
-
-        body = tk.Frame(root, bg=APP_BG)
-        body.pack(fill="both", expand=True, padx=22, pady=6)
+        body = tk.Frame(root, bg=PANEL_BG)
+        body.pack(fill="both", expand=True)
 
         panel = tk.Frame(body, bg=PANEL_BG, bd=0, highlightthickness=0)
         panel.pack(fill="both", expand=True)
@@ -735,8 +720,8 @@ class ScreensMixin:
             font=("Arial", 28, "bold"),
         ).pack()
 
-        footer = tk.Frame(root, bg=APP_BG)
-        footer.pack(fill="x", padx=22, pady=(4, 14))
+        footer = tk.Frame(root, bg=PANEL_BG)
+        footer.pack(fill="x")
         for text, bg, command in [
             ("Não", RED, self.cancel_admin_operator_removal),
             ("Sim", GREEN, self.confirm_admin_operator_removal),
@@ -749,11 +734,15 @@ class ScreensMixin:
                 fg=WHITE,
                 activebackground=bg,
                 activeforeground=WHITE,
+                command=command,
                 relief="flat",
+                bd=0,
+                borderwidth=0,
+                highlightthickness=0,
                 font=("Arial", 13, "bold"),
                 padx=18,
                 pady=14,
-            ).pack(side="left", expand=True, fill="x", padx=3)
+            ).pack(side="left", expand=True, fill="x")
 
     def cancel_admin_operator_removal(self) -> None:
         self.pending_admin_operator_removal = ""
