@@ -25,6 +25,13 @@ CSV_PATH = DATA_DIR / "medicoes.csv"
 OPERATORS_PATH = DATA_DIR / "operadores.json"
 
 DIAMETER_OPTIONS = [3, 6, 10, 12, 20]
+DIAMETER_LABELS = {
+    3: "1/8",
+    6: "1/4",
+    10: "3/8",
+    12: "1/2",
+    20: "3/4",
+}
 MENU_OPTIONS = ["Medir caudal", "Enviar dados"]
 OPERATOR_PASSWORDS = {
     "ADMIN": "7482",

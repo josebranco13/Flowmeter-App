@@ -1,0 +1,28 @@
+{
+  "session_id": "20260624_153426_819273",
+  "operador": "AMADO",
+  "molde": "AHA1",
+  "lado_molde": "Fixed plate",
+  "diametro_mm": "1/8",
+  "pressao_entrada_bar": 5.0,
+  "circuitos_por_lado": {
+    "Fixed plate": 1
+  },
+  "circuitos_inicio_por_lado": {
+    "Fixed plate": 1
+  },
+  "estado": "enviado",
+  "criado_em": "2026-06-24T15:34:26",
+  "atualizado_em": "2026-06-24T15:34:45",
+  "enviado_em": "2026-06-24T15:34:45",
+  "medicoes": [
+    {
+      "circuito": 1,
+      "caudal_min_l_min": 0.59,
+      "caudal_medio_l_min": 0.76,
+      "caudal_max_l_min": 0.91,
+      "amostras": 4,
+      "medido_em": "2026-06-24T15:34:37"
+    }
+  ]
+}

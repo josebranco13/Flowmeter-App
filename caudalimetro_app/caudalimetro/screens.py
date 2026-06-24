@@ -3,7 +3,17 @@ from __future__ import annotations
 import tkinter as tk
 from typing import Any
 
-from .config import APP_BG, BLUE, GREEN, GREY, PANEL_BG, PANEL_FG, RED, WHITE
+from .config import (
+    APP_BG,
+    BLUE,
+    DIAMETER_LABELS,
+    GREEN,
+    GREY,
+    PANEL_BG,
+    PANEL_FG,
+    RED,
+    WHITE,
+)
 
 
 class ScreensMixin:
@@ -1054,14 +1064,7 @@ class ScreensMixin:
 
     @staticmethod
     def diameter_display_text(diameter: int) -> str:
-        inch_labels = {
-            3: "1/8",
-            6: "1/4",
-            10: "3/8",
-            12: "1/2",
-            20: "3/4",
-        }
-        return inch_labels.get(diameter, f"{diameter} mm")
+        return DIAMETER_LABELS.get(diameter, f"{diameter} mm")
 
     def circuit_count_badge_text(self) -> str:
         count = self.expected_count_for_current_side()

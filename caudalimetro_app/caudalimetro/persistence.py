@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import shutil
+from copy import deepcopy
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
@@ -11,6 +12,7 @@ from uuid import uuid4
 
 from .config import (
     CSV_PATH,
+    DIAMETER_LABELS,
     OPERATOR_OPTIONS,
     OPERATOR_PASSWORDS,
     OPERATORS_PATH,
@@ -191,6 +193,42 @@ class PersistenceMixin:
     def operator_sort_key(operator: str) -> tuple[int, str, str]:
         return (0 if operator == "ADMIN" else 1, operator.casefold(), operator)
 
+    @staticmethod
+    def export_diameter_value(value: Any) -> Any:
+        if isinstance(value, bool) or value in (None, ""):
+            return value
+        try:
+            numeric_value = float(value)
+        except (TypeError, ValueError):
+            return value
+        if not numeric_value.is_integer():
+            return value
+        diameter = int(numeric_value)
+        return DIAMETER_LABELS.get(diameter, f"{diameter} mm")
+
+    def session_data_for_export(self, data: dict[str, Any]) -> dict[str, Any]:
+        exported = deepcopy(data)
+        if "diametro_mm" in exported:
+            exported["diametro_mm"] = self.export_diameter_value(
+                exported.get("diametro_mm")
+            )
+
+        measurements = exported.get("medicoes")
+        if isinstance(measurements, list):
+            duplicate_measurement_fields = (
+                "session_id",
+                "operador",
+                "molde",
+                "diametro_mm",
+                "pressao_entrada_bar",
+                "lado",
+            )
+            for measurement in measurements:
+                if isinstance(measurement, dict):
+                    for field in duplicate_measurement_fields:
+                        measurement.pop(field, None)
+        return exported
+
     def save_session(self) -> None:
         if self.session is None:
             return
@@ -255,9 +293,10 @@ class PersistenceMixin:
         data["estado"] = "enviado"
         data["atualizado_em"] = sent_at
         data["enviado_em"] = sent_at
+        exported_data = self.session_data_for_export(data)
         try:
             with path.open("w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
+                json.dump(exported_data, f, ensure_ascii=False, indent=2)
             shutil.copy2(path, SENT_DIR / path.name)
         except OSError:
             return False
@@ -310,9 +349,10 @@ class PersistenceMixin:
             data["estado"] = "enviado"
             data["atualizado_em"] = sent_at
             data["enviado_em"] = sent_at
+            exported_data = self.session_data_for_export(data)
             try:
                 with path.open("w", encoding="utf-8") as f:
-                    json.dump(data, f, ensure_ascii=False, indent=2)
+                    json.dump(exported_data, f, ensure_ascii=False, indent=2)
                 shutil.copy2(path, SENT_DIR / path.name)
             except OSError:
                 return False
@@ -324,6 +364,7 @@ class PersistenceMixin:
         sent_data["atualizado_em"] = sent_at
         sent_data["enviado_em"] = sent_at
         sent_data["medicoes"] = [selected_measurement]
+        sent_data = self.session_data_for_export(sent_data)
         sent_name = (
             f"{path.stem}_medicao_{measurement_index + 1}_"
             f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:6]}.json"
@@ -356,8 +397,9 @@ class PersistenceMixin:
                 continue
             data["estado"] = "enviado"
             data["enviado_em"] = datetime.now().isoformat(timespec="seconds")
+            exported_data = self.session_data_for_export(data)
             with path.open("w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
+                json.dump(exported_data, f, ensure_ascii=False, indent=2)
             shutil.copy2(path, SENT_DIR / path.name)
             sent_count += 1
         return sent_count
