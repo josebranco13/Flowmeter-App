@@ -38,6 +38,10 @@ class CaudalimetroApp(
         self.option_add("*Button.takeFocus", 0)
         self.maximize_window()
 
+        # novo
+        self.attributes("-alpha", 0.0)
+        self.show_splash()
+
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
         SENT_DIR.mkdir(parents=True, exist_ok=True)
@@ -98,7 +102,7 @@ class CaudalimetroApp(
         self.bind_all("<KeyPress>", self.on_key)
         self.bind_all("<ButtonRelease-1>", self.restore_keyboard_focus, add="+")
         self.protocol("WM_DELETE_WINDOW", self.destroy)
-        self.show_login()
+        #self.show_login()
         self.after_idle(self.restore_keyboard_focus)
 
     def maximize_window(self) -> None:

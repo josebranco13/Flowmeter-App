@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import os
 import tkinter as tk
 from typing import Any
+
+#novo
+from PIL import Image, ImageTk
 
 from .config import (
     APP_HEIGHT,
     BLUE,
+    BLACK,
     DIAMETER_LABELS,
     GREEN,
     GREY,
@@ -17,6 +22,77 @@ from .config import (
 
 
 class ScreensMixin:
+
+    def show_splash(self) -> None:
+        self.screen = "SPLASH"
+        self.clear() 
+        
+        # The main background frame that fills the whole window
+        splash_frame = tk.Frame(self, bg=WHITE)
+        splash_frame.pack(fill="both", expand=True)
+        
+        # A container frame to keep the text and image grouped together.
+        # packing it with expand=True (but no fill) centers it perfectly in the middle.
+        content_container = tk.Frame(splash_frame, bg=WHITE)
+        content_container.pack(expand=True) 
+
+        # --- Add Text (Packed first so it sits on top) ---
+        tk.Label(
+            content_container,
+            text="Carregando...", 
+            bg=WHITE,
+            fg=BLACK, 
+            font=("Arial", 24, "bold")
+        ).pack(side="top", pady=(0, 20)) # pady adds a 20px gap below the text
+
+        # --- Add Image (Packed second so it sits below the text) ---
+        try:
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            
+            # 2. Join that folder path with your image name
+            image_path = os.path.join(current_dir, "logo.png")
+            
+            # 3. Open the image using the absolute path
+            image = Image.open(image_path) 
+            # We removed the image.resize() line so it uses its native resolution
+            self.splash_img = ImageTk.PhotoImage(image)
+            tk.Label(content_container, image=self.splash_img, bg=WHITE).pack(side="top")
+        except Exception as e:
+            print(f"Could not load image: {e}")
+
+        # Start the fade-in animation
+        self._fade_in_splash()
+
+    def _fade_in_splash(self, alpha: float = 0.0) -> None:
+        alpha += 0.05
+        if alpha < 1.0:
+            self.attributes("-alpha", alpha)
+            self.after(30, self._fade_in_splash, alpha)
+        else:
+            self.attributes("-alpha", 1.0)
+            # Wait for 1.5 seconds (1500 ms) before fading out
+            self.after(1500, self._fade_out_splash)
+
+    def _fade_out_splash(self, alpha: float = 1.0) -> None:
+        alpha -= 0.05
+        if alpha > 0.0:
+            self.attributes("-alpha", alpha)
+            self.after(30, self._fade_out_splash, alpha)
+        else:
+            self.attributes("-alpha", 0.0)
+            # Once fully invisible, load the first real screen
+            self.show_login()
+            # Fade the main screen back in
+            self._fade_in_main()
+
+    def _fade_in_main(self, alpha: float = 0.0) -> None:
+        alpha += 0.05
+        if alpha < 1.0:
+            self.attributes("-alpha", alpha)
+            self.after(30, self._fade_in_main, alpha)
+        else:
+            self.attributes("-alpha", 1.0)
+
     def show_login(self) -> None:
         self.screen = "LOGIN"
         self.refresh_operator_options()
@@ -203,7 +279,9 @@ class ScreensMixin:
                 "Prof. Paulo Costa\n"
                 "Prof. João Galvão\n\n\n"
                 "Colaboração técnica:\n\n"
-                "Eng. João Godinho"
+                "Eng. João Godinho\n"
+                "Eng. Jõao Almeida\n"
+                "Eng. Adriano Gomes"
             ),
             bg=WHITE,
             fg=PANEL_FG,
