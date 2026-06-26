@@ -2267,21 +2267,38 @@ class ScreensMixin:
 
     def show_send_review(self) -> None:
         self.screen = "SEND_REVIEW"
+        sessions = self.load_pending_sessions()
+        rows = self.pending_measurement_rows(sessions)
+        groups = self.pending_measurement_groups(rows)
+        if groups:
+            self.normalize_pending_review_selection(groups)
+        expanded_group_key = getattr(self, "send_review_expanded_group_key", None)
+        selected_group = self.selected_pending_group(groups)
+        is_selected_group_expanded = (
+            selected_group is not None
+            and selected_group.get("_group_key") == expanded_group_key
+        )
+        delete_text = "Apagar" if is_selected_group_expanded else "Expandir"
+        delete_command = (
+            self.delete_selected_pending_session
+            if is_selected_group_expanded
+            else self.toggle_selected_pending_group
+        )
         panel = self.build_base(
             "",
             "",
+            delete_text=delete_text,
+            delete_command=delete_command,
             select_text="Enviar selecionado",
             confirm_text="Enviar",
         )
         panel.configure(bg=WHITE)
-        sessions = self.load_pending_sessions()
-        rows = self.pending_measurement_rows(sessions)
         session_count = self.pending_review_session_count(rows)
         operator_count = len({row["_operator_key"] for row in rows})
         count_text = (
-            f"Operadores: {operator_count} | Medições: {len(rows)}"
+            f"Operadores: {operator_count} | Grupos: {len(groups)} | Medições: {len(rows)}"
             if self.operator_id == "ADMIN"
-            else f"Sessões: {session_count} | Medições: {len(rows)}"
+            else f"Sessões: {session_count} | Grupos: {len(groups)} | Medições: {len(rows)}"
         )
 
         tk.Label(
@@ -2299,25 +2316,40 @@ class ScreensMixin:
             font=("Arial", 14, "bold"),
         ).pack(pady=(0, 12))
 
-        if rows:
-            self.selected_index = min(self.selected_index, session_count - 1)
+        if groups:
+            display_rows = self.pending_review_display_rows(groups)
+            is_expanded = (
+                getattr(self, "send_review_expanded_group_key", None) is not None
+            )
+            if is_expanded:
+                self.normalize_send_review_detail_selection(display_rows)
             max_rows = self.send_review_visible_row_count()
-            max_start = max(len(rows) - max_rows, 0)
+            max_start = max(len(display_rows) - max_rows, 0)
             first_visible_row = max(
                 0,
                 min(getattr(self, "send_review_first_row", 0), max_start),
             )
             self.send_review_first_row = first_visible_row
-            visible_rows = rows[first_visible_row : first_visible_row + max_rows]
-            if visible_rows and all(
-                row["_session_index"] != self.selected_index for row in visible_rows
-            ):
-                self.selected_index = int(visible_rows[0]["_session_index"])
+            first_visible_row = self.send_review_first_row_for_selection(
+                display_rows, max_rows
+            )
+            self.send_review_first_row = first_visible_row
+            visible_rows = display_rows[first_visible_row : first_visible_row + max_rows]
             table_area = tk.Frame(panel, bg=WHITE)
             table_area.pack(fill="x", padx=24, pady=(0, 0))
             table = tk.Frame(table_area, bg=WHITE)
             table.pack(side="left", fill="x", expand=True)
-            if self.operator_id == "ADMIN":
+            self.bind_send_review_scroll(table_area)
+            self.bind_send_review_scroll(table)
+            if not is_expanded:
+                headers = [
+                    ("Data", 16),
+                    ("Operador", 14),
+                    ("Molde", 12),
+                    ("Lado", 14),
+                    ("Nº circuitos", 12),
+                ]
+            elif self.operator_id == "ADMIN":
                 headers = [
                     ("Data", 14),
                     ("Operador", 12),
@@ -2339,7 +2371,7 @@ class ScreensMixin:
                 ]
             for col, (header, width) in enumerate(headers):
                 table.grid_columnconfigure(col, weight=width)
-                tk.Label(
+                header_label = tk.Label(
                     table,
                     text=header,
                     bg="#374151",
@@ -2347,11 +2379,26 @@ class ScreensMixin:
                     font=("Arial", 10, "bold"),
                     width=width,
                     pady=4,
-                ).grid(row=0, column=col, padx=1, sticky="ew")
+                )
+                header_label.grid(row=0, column=col, padx=1, sticky="ew")
+                self.bind_send_review_scroll(header_label)
 
             for row_index, item in enumerate(visible_rows, start=1):
-                is_selected = item["_session_index"] == self.selected_index
-                if self.operator_id == "ADMIN":
+                is_detail = item.get("_row_type") == "detail"
+                is_selected = (
+                    self.is_selected_send_review_detail_row(item)
+                    if is_expanded
+                    else item["_group_index"] == self.selected_index
+                )
+                if not is_expanded:
+                    values = [
+                        item["data"],
+                        item["operador"],
+                        item["molde"],
+                        item["lado"],
+                        item["circuito"],
+                    ]
+                elif self.operator_id == "ADMIN":
                     values = [
                         item["data"],
                         item["operador"],
@@ -2372,23 +2419,39 @@ class ScreensMixin:
                         item["medio"],
                     ]
                 for col, value in enumerate(values):
-                    tk.Label(
+                    bg = WHITE
+                    fg = PANEL_FG
+                    font_weight = "normal"
+                    if is_selected:
+                        bg = BLUE
+                        fg = WHITE
+                        font_weight = "bold"
+                    elif is_detail:
+                        bg = "#e8f4ff" if is_selected else "#f4f8fb"
+                    cell = tk.Label(
                         table,
                         text=value,
-                        bg=BLUE if is_selected else WHITE,
-                        fg=WHITE if is_selected else PANEL_FG,
-                        font=("Arial", 10, "bold" if is_selected else "normal"),
+                        bg=bg,
+                        fg=fg,
+                        font=("Arial", 10, font_weight),
                         width=headers[col][1],
                         pady=4,
-                    ).grid(row=row_index, column=col, padx=1, pady=1, sticky="ew")
+                    )
+                    cell.bind(
+                        "<ButtonRelease-1>",
+                        lambda _event, row=item: self.select_send_review_row(row),
+                    )
+                    self.bind_send_review_scroll(cell)
+                    cell.grid(row=row_index, column=col, padx=1, pady=1, sticky="ew")
 
-            if len(rows) > max_rows:
+            if len(display_rows) > max_rows:
                 scrollbar = tk.Frame(table_area, bg="#d7d7d7", width=22)
                 scrollbar.pack(side="right", fill="y", padx=(8, 0))
                 scrollbar.pack_propagate(False)
+                self.bind_send_review_scroll(scrollbar)
 
-                visible_fraction = max(0.12, min(1.0, len(visible_rows) / len(rows)))
-                max_start = max(len(rows) - len(visible_rows), 1)
+                visible_fraction = max(0.12, min(1.0, len(visible_rows) / len(display_rows)))
+                max_start = max(len(display_rows) - len(visible_rows), 1)
                 thumb_top = (first_visible_row / max_start) * (1.0 - visible_fraction)
                 tk.Frame(scrollbar, bg="#555555").place(
                     relx=0.5,
@@ -2416,6 +2479,329 @@ class ScreensMixin:
             return 0
         return max(int(row["_session_index"]) for row in rows) + 1
 
+    def pending_measurement_groups(
+        self, rows: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        groups: list[dict[str, Any]] = []
+        group_by_key: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+        for row in rows:
+            group_key = (
+                str(row["_file_name"]),
+                str(row["_operator_key"]),
+                str(row["_mold_key"]),
+                str(row["_side_key"]),
+            )
+            group = group_by_key.get(group_key)
+            if group is None:
+                group = {
+                    "_group_index": len(groups),
+                    "_group_key": group_key,
+                    "_operator_key": row["_operator_key"],
+                    "_rows": [],
+                    "_row_type": "group",
+                    "data": row["data"],
+                    "operador": row["operador"],
+                    "molde": row["molde"],
+                    "lado": row["lado"],
+                    "circuito": "",
+                    "min": "-",
+                    "medio": "-",
+                    "max": "-",
+                }
+                group_by_key[group_key] = group
+                groups.append(group)
+            group["_rows"].append(row)
+
+        for group in groups:
+            group_rows = group["_rows"]
+            group["circuito"] = str(len(group_rows))
+            group["min"] = self.format_group_measurement_value(group_rows, "min")
+            group["medio"] = self.format_group_measurement_value(group_rows, "medio")
+            group["max"] = self.format_group_measurement_value(group_rows, "max")
+        return groups
+
+    def pending_review_display_rows(
+        self, groups: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        expanded_group_key = getattr(self, "send_review_expanded_group_key", None)
+        valid_group_keys = {group["_group_key"] for group in groups}
+        if expanded_group_key not in valid_group_keys:
+            self.send_review_expanded_group_key = None
+            self.send_review_selected_measurement_ref = None
+            return groups
+
+        for group in groups:
+            if group["_group_key"] != expanded_group_key:
+                continue
+
+            display_rows = []
+            for row in group["_rows"]:
+                detail_row = row.copy()
+                detail_row["_row_type"] = "detail"
+                detail_row["_group_index"] = group["_group_index"]
+                detail_row["_group_key"] = group["_group_key"]
+                display_rows.append(detail_row)
+            return display_rows
+
+        return groups
+
+    @staticmethod
+    def send_review_measurement_ref(row: dict[str, Any]) -> tuple[str, int]:
+        return str(row["_file_name"]), int(row["_measurement_index"])
+
+    def normalize_send_review_detail_selection(
+        self, rows: list[dict[str, Any]]
+    ) -> tuple[str, int] | None:
+        detail_refs = [
+            self.send_review_measurement_ref(row)
+            for row in rows
+            if row.get("_row_type") == "detail"
+        ]
+        if not detail_refs:
+            self.send_review_selected_measurement_ref = None
+            return None
+
+        current_ref = getattr(self, "send_review_selected_measurement_ref", None)
+        if current_ref not in detail_refs:
+            current_ref = detail_refs[0]
+            self.send_review_selected_measurement_ref = current_ref
+        return current_ref
+
+    def is_selected_send_review_detail_row(self, row: dict[str, Any]) -> bool:
+        if row.get("_row_type") != "detail":
+            return False
+        return (
+            self.send_review_measurement_ref(row)
+            == getattr(self, "send_review_selected_measurement_ref", None)
+        )
+
+    @staticmethod
+    def pending_review_group_indices(groups: list[dict[str, Any]]) -> list[int]:
+        return [int(group["_group_index"]) for group in groups]
+
+    def normalize_pending_review_selection(
+        self, groups: list[dict[str, Any]]
+    ) -> list[int]:
+        group_indices = self.pending_review_group_indices(groups)
+        if not group_indices:
+            self.selected_index = 0
+            return []
+
+        if self.selected_index not in group_indices:
+            position = max(0, min(self.selected_index, len(group_indices) - 1))
+            self.selected_index = group_indices[position]
+        return group_indices
+
+    @staticmethod
+    def pending_review_group_bounds(
+        display_rows: list[dict[str, Any]], group_index: int
+    ) -> tuple[int, int] | None:
+        first_row: int | None = None
+        last_row: int | None = None
+        for row_index, row in enumerate(display_rows):
+            if int(row["_group_index"]) != group_index:
+                continue
+            if first_row is None:
+                first_row = row_index
+            last_row = row_index
+
+        if first_row is None or last_row is None:
+            return None
+        return first_row, last_row
+
+    @staticmethod
+    def clamp_send_review_first_row(
+        rows: list[dict[str, Any]], first_row: int, max_rows: int
+    ) -> int:
+        max_start = max(len(rows) - max_rows, 0)
+        return max(0, min(first_row, max_start))
+
+    def send_review_first_row_for_group(
+        self, rows: list[dict[str, Any]], group_index: int, max_rows: int
+    ) -> int:
+        bounds = self.pending_review_group_bounds(rows, group_index)
+        if bounds is None:
+            return 0
+
+        first_row, _ = bounds
+        return self.clamp_send_review_first_row(rows, first_row, max_rows)
+
+    def send_review_first_row_for_selection(
+        self, rows: list[dict[str, Any]], max_rows: int
+    ) -> int:
+        first_visible_row = self.clamp_send_review_first_row(
+            rows,
+            int(getattr(self, "send_review_first_row", 0)),
+            max_rows,
+        )
+        if getattr(self, "send_review_expanded_group_key", None) is not None:
+            return first_visible_row
+
+        bounds = self.pending_review_group_bounds(rows, self.selected_index)
+        if bounds is None:
+            return first_visible_row
+
+        selected_first_row, selected_last_row = bounds
+        visible_last_row = first_visible_row + max_rows - 1
+        if selected_first_row < first_visible_row:
+            return self.clamp_send_review_first_row(rows, selected_first_row, max_rows)
+
+        if selected_last_row > visible_last_row:
+            selected_row_count = selected_last_row - selected_first_row + 1
+            if selected_row_count > max_rows:
+                return self.clamp_send_review_first_row(
+                    rows, selected_first_row, max_rows
+                )
+            return self.clamp_send_review_first_row(
+                rows, selected_last_row - max_rows + 1, max_rows
+            )
+
+        return first_visible_row
+
+    def move_send_review_selection(self, delta: int) -> bool:
+        rows = self.pending_measurement_rows(self.load_pending_sessions())
+        groups = self.pending_measurement_groups(rows)
+        if not groups:
+            self.selected_index = 0
+            self.send_review_first_row = 0
+            return False
+
+        max_rows = self.send_review_visible_row_count()
+        group_indices = self.normalize_pending_review_selection(groups)
+        display_rows = self.pending_review_display_rows(groups)
+        if getattr(self, "send_review_expanded_group_key", None) is not None:
+            return self.move_send_review_detail_selection(
+                delta, display_rows, max_rows
+            )
+
+        bounds = self.pending_review_group_bounds(display_rows, self.selected_index)
+        if not group_indices or bounds is None:
+            self.selected_index = 0
+            self.send_review_first_row = 0
+            return False
+
+        self.send_review_first_row = self.send_review_first_row_for_selection(
+            display_rows, max_rows
+        )
+        first_visible_row = self.send_review_first_row
+        visible_last_row = first_visible_row + max_rows - 1
+        selected_first_row, selected_last_row = bounds
+
+        if delta > 0 and selected_last_row > visible_last_row:
+            self.send_review_first_row = self.clamp_send_review_first_row(
+                display_rows, first_visible_row + 1, max_rows
+            )
+            return True
+
+        if delta < 0 and selected_first_row < first_visible_row:
+            self.send_review_first_row = self.clamp_send_review_first_row(
+                display_rows, first_visible_row - 1, max_rows
+            )
+            return True
+
+        if getattr(self, "send_review_expanded_group_key", None) is not None:
+            return True
+
+        try:
+            current_position = group_indices.index(self.selected_index)
+        except ValueError:
+            current_position = 0
+
+        step = 1 if delta > 0 else -1
+        self.selected_index = group_indices[
+            (current_position + step) % len(group_indices)
+        ]
+        self.send_review_first_row = self.send_review_first_row_for_group(
+            display_rows, self.selected_index, max_rows
+        )
+        return True
+
+    def move_send_review_detail_selection(
+        self, delta: int, rows: list[dict[str, Any]], max_rows: int
+    ) -> bool:
+        detail_rows = [
+            (row_index, row)
+            for row_index, row in enumerate(rows)
+            if row.get("_row_type") == "detail"
+        ]
+        if not detail_rows:
+            self.send_review_selected_measurement_ref = None
+            self.send_review_first_row = 0
+            return False
+
+        current_ref = self.normalize_send_review_detail_selection(rows)
+        refs = [self.send_review_measurement_ref(row) for _, row in detail_rows]
+        try:
+            current_position = refs.index(current_ref)
+        except ValueError:
+            current_position = 0
+
+        step = 1 if delta > 0 else -1
+        next_position = (current_position + step) % len(detail_rows)
+        next_row_index, next_row = detail_rows[next_position]
+        self.send_review_selected_measurement_ref = self.send_review_measurement_ref(
+            next_row
+        )
+
+        first_row = self.clamp_send_review_first_row(
+            rows,
+            int(getattr(self, "send_review_first_row", 0)),
+            max_rows,
+        )
+        visible_last_row = first_row + max_rows - 1
+        if next_row_index < first_row:
+            first_row = next_row_index
+        elif next_row_index > visible_last_row:
+            first_row = next_row_index - max_rows + 1
+
+        self.send_review_first_row = self.clamp_send_review_first_row(
+            rows, first_row, max_rows
+        )
+        return True
+
+    def select_send_review_group(self, group_index: int) -> None:
+        rows = self.pending_measurement_rows(self.load_pending_sessions())
+        groups = self.pending_measurement_groups(rows)
+        if not groups:
+            self.selected_index = 0
+            self.send_review_first_row = 0
+            self.show_send_review()
+            return
+
+        group_indices = self.pending_review_group_indices(groups)
+        if group_index in group_indices:
+            self.selected_index = group_index
+            selected_group = self.selected_pending_group(groups)
+            if selected_group is not None:
+                self.send_review_expanded_group_key = selected_group["_group_key"]
+                self.send_review_selected_measurement_ref = None
+        else:
+            self.normalize_pending_review_selection(groups)
+
+        display_rows = self.pending_review_display_rows(groups)
+        self.normalize_send_review_detail_selection(display_rows)
+        max_rows = self.send_review_visible_row_count()
+        self.send_review_first_row = self.send_review_first_row_for_selection(
+            display_rows, max_rows
+        )
+        self.show_send_review()
+
+    def select_send_review_row(self, row: dict[str, Any]) -> None:
+        if row.get("_row_type") != "detail":
+            self.select_send_review_group(int(row["_group_index"]))
+            return
+
+        self.selected_index = int(row["_group_index"])
+        self.send_review_selected_measurement_ref = self.send_review_measurement_ref(row)
+        rows = self.pending_measurement_rows(self.load_pending_sessions())
+        groups = self.pending_measurement_groups(rows)
+        display_rows = self.pending_review_display_rows(groups)
+        max_rows = self.send_review_visible_row_count()
+        self.send_review_first_row = self.send_review_first_row_for_selection(
+            display_rows, max_rows
+        )
+        self.show_send_review()
+
     def send_review_visible_row_count(self) -> int:
         height = max(self.winfo_height(), self.winfo_screenheight(), 480)
         if height >= 900:
@@ -2424,15 +2810,136 @@ class ScreensMixin:
             return 11
         return 8
 
+    def bind_send_review_scroll(self, widget: tk.Widget) -> None:
+        widget.bind("<MouseWheel>", self.on_send_review_mousewheel, add="+")
+        widget.bind("<Button-4>", self.on_send_review_mousewheel, add="+")
+        widget.bind("<Button-5>", self.on_send_review_mousewheel, add="+")
+
+    def on_send_review_mousewheel(self, event: tk.Event) -> str:
+        if getattr(event, "num", None) == 4:
+            delta = -1
+        elif getattr(event, "num", None) == 5:
+            delta = 1
+        else:
+            delta = -1 if getattr(event, "delta", 0) > 0 else 1
+
+        if self.scroll_send_review_rows(delta):
+            self.show_send_review()
+        return "break"
+
+    def scroll_send_review_rows(self, delta: int) -> bool:
+        rows = self.pending_measurement_rows(self.load_pending_sessions())
+        groups = self.pending_measurement_groups(rows)
+        if not groups:
+            self.send_review_first_row = 0
+            return False
+
+        display_rows = self.pending_review_display_rows(groups)
+        max_rows = self.send_review_visible_row_count()
+        if len(display_rows) <= max_rows:
+            self.send_review_first_row = 0
+            return False
+
+        first_row = int(getattr(self, "send_review_first_row", 0))
+        next_first_row = self.clamp_send_review_first_row(
+            display_rows,
+            first_row + delta,
+            max_rows,
+        )
+        if next_first_row == first_row:
+            return False
+
+        self.send_review_first_row = next_first_row
+        return True
+
+    def selected_pending_group(self, groups: list[dict[str, Any]]) -> dict[str, Any] | None:
+        if not groups:
+            return None
+        self.normalize_pending_review_selection(groups)
+        for group in groups:
+            if int(group["_group_index"]) == self.selected_index:
+                return group
+        return None
+
     def selected_pending_session_rows(self) -> list[dict[str, Any]]:
         rows = self.pending_measurement_rows(self.load_pending_sessions())
-        if not rows:
+        groups = self.pending_measurement_groups(rows)
+        group = self.selected_pending_group(groups)
+        if group is None:
             self.selected_index = 0
             return []
 
-        session_count = self.pending_review_session_count(rows)
-        self.selected_index = min(self.selected_index, session_count - 1)
-        return [row for row in rows if row["_session_index"] == self.selected_index]
+        if getattr(self, "send_review_expanded_group_key", None) is not None:
+            display_rows = self.pending_review_display_rows(groups)
+            selected_ref = self.normalize_send_review_detail_selection(display_rows)
+            if selected_ref is None:
+                return []
+            return [
+                row
+                for row in display_rows
+                if row.get("_row_type") == "detail"
+                and self.send_review_measurement_ref(row) == selected_ref
+            ]
+
+        return list(group["_rows"])
+
+    def toggle_selected_pending_group(self) -> None:
+        rows = self.pending_measurement_rows(self.load_pending_sessions())
+        groups = self.pending_measurement_groups(rows)
+        group = self.selected_pending_group(groups)
+        if group is None:
+            self.status_text = "Não existe uma medição selecionada para expandir."
+            self.show_send_review()
+            return
+
+        group_key = group["_group_key"]
+        if getattr(self, "send_review_expanded_group_key", None) == group_key:
+            self.send_review_expanded_group_key = None
+            self.send_review_selected_measurement_ref = None
+        else:
+            self.send_review_expanded_group_key = group_key
+            self.send_review_selected_measurement_ref = None
+
+        display_rows = self.pending_review_display_rows(groups)
+        self.normalize_send_review_detail_selection(display_rows)
+        max_rows = self.send_review_visible_row_count()
+        self.send_review_first_row = self.send_review_first_row_for_selection(
+            display_rows, max_rows
+        )
+        self.status_text = ""
+        self.show_send_review()
+
+    def restore_send_review_selection_after_change(
+        self,
+        groups: list[dict[str, Any]],
+        expanded_group_key: tuple[str, str, str, str] | None,
+    ) -> None:
+        if not groups:
+            self.selected_index = 0
+            self.send_review_expanded_group_key = None
+            self.send_review_selected_measurement_ref = None
+            self.send_review_first_row = 0
+            return
+
+        if expanded_group_key is not None:
+            for group in groups:
+                if group["_group_key"] != expanded_group_key:
+                    continue
+                self.selected_index = int(group["_group_index"])
+                self.send_review_expanded_group_key = expanded_group_key
+                display_rows = self.pending_review_display_rows(groups)
+                self.normalize_send_review_detail_selection(display_rows)
+                max_rows = self.send_review_visible_row_count()
+                self.send_review_first_row = self.send_review_first_row_for_selection(
+                    display_rows, max_rows
+                )
+                return
+
+        self.send_review_expanded_group_key = None
+        self.send_review_selected_measurement_ref = None
+        self.selected_index = min(self.selected_index, len(groups) - 1)
+        self.normalize_pending_review_selection(groups)
+        self.send_review_first_row = 0
 
     def should_show_pending_measurement(
         self, measurement: dict[str, Any], session_operator: str
@@ -2452,16 +2959,15 @@ class ScreensMixin:
             self.show_send_review()
             return
 
+        expanded_group_key = getattr(self, "send_review_expanded_group_key", None)
         deleted_count = self.delete_pending_measurement_rows(selected_rows)
         if deleted_count:
             self.status_text = f"Medições apagadas: {deleted_count}."
             remaining_rows = self.pending_measurement_rows(self.load_pending_sessions())
-            if remaining_rows:
-                session_count = self.pending_review_session_count(remaining_rows)
-                self.selected_index = min(self.selected_index, session_count - 1)
-            else:
-                self.selected_index = 0
-            self.send_review_first_row = 0
+            remaining_groups = self.pending_measurement_groups(remaining_rows)
+            self.restore_send_review_selection_after_change(
+                remaining_groups, expanded_group_key
+            )
         else:
             self.status_text = "Não foi possível apagar a medição selecionada."
         self.show_send_review()
@@ -2473,16 +2979,15 @@ class ScreensMixin:
             self.show_send_review()
             return
 
+        expanded_group_key = getattr(self, "send_review_expanded_group_key", None)
         sent_count = self.send_pending_measurement_rows(selected_rows)
         if sent_count:
             self.status_text = f"Medições enviadas: {sent_count}."
             remaining_rows = self.pending_measurement_rows(self.load_pending_sessions())
-            if remaining_rows:
-                session_count = self.pending_review_session_count(remaining_rows)
-                self.selected_index = min(self.selected_index, session_count - 1)
-            else:
-                self.selected_index = 0
-            self.send_review_first_row = 0
+            remaining_groups = self.pending_measurement_groups(remaining_rows)
+            self.restore_send_review_selection_after_change(
+                remaining_groups, expanded_group_key
+            )
         else:
             self.status_text = "Não foi possível enviar a medição selecionada."
         self.show_send_review()
@@ -2535,7 +3040,8 @@ class ScreensMixin:
             )
             session_date = self.format_session_date(session)
             session_operator = session.get("operador") or "-"
-            mold = self.short_table_text(session.get("molde") or "-", 10)
+            mold_value = session.get("molde") or "-"
+            mold = self.short_table_text(mold_value, 10)
             session_rows: list[dict[str, Any]] = []
             for measurement_index, measurement in enumerate(measurements):
                 if not isinstance(measurement, dict):
@@ -2545,28 +3051,38 @@ class ScreensMixin:
                 if not self.should_show_pending_measurement(measurement, session_operator):
                     continue
 
+                side_value = measurement.get("lado") or "-"
+                min_value = self.measurement_float_value(
+                    measurement.get("caudal_min_l_min")
+                )
+                average_value = self.measurement_float_value(
+                    measurement.get("caudal_medio_l_min")
+                )
+                max_value = self.measurement_float_value(
+                    measurement.get("caudal_max_l_min")
+                )
                 session_rows.append(
                     {
                         "_file_name": file_name,
                         "_measurement_index": measurement_index,
                         "_session_index": session_index,
                         "_operator_key": self.normalize_operator_name(str(operator)),
+                        "_mold_key": str(mold_value),
+                        "_side_key": str(side_value),
+                        "_min_value": min_value,
+                        "_average_value": average_value,
+                        "_max_value": max_value,
+                        "_row_type": "detail",
                         "data": session_date,
                         "operador": self.short_table_text(operator, 12),
                         "molde": mold,
-                        "lado": self.short_table_text(measurement.get("lado") or "-", 12),
+                        "lado": self.short_table_text(side_value, 12),
                         "circuito": self.short_table_text(
                             measurement.get("circuito") or "-", 5
                         ),
-                        "min": self.format_measurement_value(
-                            measurement.get("caudal_min_l_min")
-                        ),
-                        "medio": self.format_measurement_value(
-                            measurement.get("caudal_medio_l_min")
-                        ),
-                        "max": self.format_measurement_value(
-                            measurement.get("caudal_max_l_min")
-                        ),
+                        "min": self.format_measurement_value(min_value),
+                        "medio": self.format_measurement_value(average_value),
+                        "max": self.format_measurement_value(max_value),
                     }
                 )
             if session_rows:
@@ -2592,6 +3108,36 @@ class ScreensMixin:
             return f"{float(value):.2f}"
         except (TypeError, ValueError):
             return str(value)
+
+    @staticmethod
+    def measurement_float_value(value: Any) -> float | None:
+        if value in (None, ""):
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    def format_group_measurement_value(
+        self, rows: list[dict[str, Any]], field: str
+    ) -> str:
+        value_key = {
+            "min": "_min_value",
+            "medio": "_average_value",
+            "max": "_max_value",
+        }[field]
+        values = [
+            value
+            for value in (row.get(value_key) for row in rows)
+            if isinstance(value, (int, float))
+        ]
+        if not values:
+            return "-"
+        if field == "min":
+            return self.format_measurement_value(min(values))
+        if field == "max":
+            return self.format_measurement_value(max(values))
+        return self.format_measurement_value(sum(values) / len(values))
 
     @staticmethod
     def short_table_text(value: Any, limit: int) -> str:

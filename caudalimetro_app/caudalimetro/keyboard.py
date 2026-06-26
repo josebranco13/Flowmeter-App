@@ -144,21 +144,7 @@ class KeyboardMixin:
             if not self.update_option_selection():
                 self.show_summary()
         elif self.screen == "SEND_REVIEW":
-            rows = self.pending_measurement_rows(self.load_pending_sessions())
-            if rows:
-                max_rows = self.send_review_visible_row_count()
-                max_start = max(len(rows) - max_rows, 0)
-                if max_start:
-                    self.send_review_first_row = max(
-                        0,
-                        min(self.send_review_first_row + delta, max_start),
-                    )
-                    self.selected_index = int(
-                        rows[self.send_review_first_row]["_session_index"]
-                    )
-                else:
-                    session_count = self.pending_review_session_count(rows)
-                    self.selected_index = (self.selected_index + delta) % session_count
+            if self.move_send_review_selection(delta):
                 self.show_send_review()
         elif self.screen == "ADMIN_OPERATORS":
             operators = self.managed_operator_options()
@@ -312,7 +298,10 @@ class KeyboardMixin:
         elif self.screen == "SIDE_COMPLETE":
             self.restart_current_side_measurements()
         elif self.screen == "SEND_REVIEW":
-            self.delete_selected_pending_session()
+            if self.send_review_expanded_group_key is not None:
+                self.delete_selected_pending_session()
+            else:
+                self.toggle_selected_pending_group()
         elif self.screen == "ADMIN_OPERATORS":
             self.remove_selected_admin_operator()
         elif self.screen == "ADMIN_ADD_OPERATOR":
@@ -527,6 +516,8 @@ class KeyboardMixin:
                 self.status_text = ""
                 self.selected_index = 0
                 self.send_review_first_row = 0
+                self.send_review_expanded_group_key = None
+                self.send_review_selected_measurement_ref = None
                 self.show_send_review()
 
         elif self.screen == "ADMIN_MENU":
@@ -537,6 +528,8 @@ class KeyboardMixin:
                 self.status_text = ""
                 self.selected_index = 0
                 self.send_review_first_row = 0
+                self.send_review_expanded_group_key = None
+                self.send_review_selected_measurement_ref = None
                 self.show_send_review()
 
         elif self.screen == "MOLD":
@@ -651,6 +644,8 @@ class KeyboardMixin:
                 self.status_text = ""
                 self.selected_index = 0
                 self.send_review_first_row = 0
+                self.send_review_expanded_group_key = None
+                self.send_review_selected_measurement_ref = None
                 self.show_send_review()
             else:
                 self.logout()
@@ -661,6 +656,8 @@ class KeyboardMixin:
             self.status_text = f"Envio concluído. Medições enviadas: {count}."
             self.selected_index = 0
             self.send_review_first_row = 0
+            self.send_review_expanded_group_key = None
+            self.send_review_selected_measurement_ref = None
             self.show_send_review()
 
         elif self.screen == "ADMIN_OPERATORS":
@@ -740,8 +737,16 @@ class KeyboardMixin:
             self.show_circuit_results()
         elif self.screen == "SEND_REVIEW":
             self.status_text = ""
+            if self.send_review_expanded_group_key is not None:
+                self.send_review_expanded_group_key = None
+                self.send_review_selected_measurement_ref = None
+                self.send_review_first_row = 0
+                self.show_send_review()
+                return
             self.selected_index = 0
             self.send_review_first_row = 0
+            self.send_review_expanded_group_key = None
+            self.send_review_selected_measurement_ref = None
             if self.operator_id == "ADMIN":
                 self.show_admin_menu()
             else:

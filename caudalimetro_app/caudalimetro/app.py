@@ -53,6 +53,8 @@ class CaudalimetroApp(
         self.active_field = 0
         self.selected_index = 0
         self.send_review_first_row = 0
+        self.send_review_expanded_group_key: tuple[str, str, str, str] | None = None
+        self.send_review_selected_measurement_ref: tuple[str, int] | None = None
         self.operator_options = get_usernames()
         self.operator_list_open = False
         self.operator_selected_index = 0
