@@ -2973,6 +2973,8 @@ class ScreensMixin:
         self.show_send_review()
 
     def send_selected_pending_session(self) -> None:
+        self.last_send_error = ""
+        
         selected_rows = self.selected_pending_session_rows()
         if not selected_rows:
             self.status_text = "Não existe uma medição selecionada para enviar."
@@ -2989,7 +2991,10 @@ class ScreensMixin:
                 remaining_groups, expanded_group_key
             )
         else:
-            self.status_text = "Não foi possível enviar a medição selecionada."
+            self.status_text = (
+                self.last_send_error
+                or "Não foi possível enviar a medição selecionada."
+            )
         self.show_send_review()
 
     def send_pending_measurements_for_current_operator(self) -> int:
