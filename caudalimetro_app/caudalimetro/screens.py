@@ -50,13 +50,17 @@ class ScreensMixin:
             current_dir = os.path.dirname(os.path.abspath(__file__))
             
             # 2. Join that folder path with your image name
-            image_path = os.path.join(current_dir, "logo.png")
+            aha_path = os.path.join(current_dir, "aha.png")
+            ipl_path = os.path.join(current_dir, "ipl.png")
             
             # 3. Open the image using the absolute path
-            image = Image.open(image_path) 
+            aha_image = Image.open(aha_path)
+            ipl_image = Image.open(ipl_path)
             # We removed the image.resize() line so it uses its native resolution
-            self.splash_img = ImageTk.PhotoImage(image)
-            tk.Label(content_container, image=self.splash_img, bg=WHITE).pack(side="top")
+            self.splash_img = ImageTk.PhotoImage(aha_image)
+            self.splash_img2 = ImageTk.PhotoImage(ipl_image)
+            tk.Label(content_container, image=self.splash_img, bg=WHITE).pack(side="left")
+            tk.Label(content_container, image=self.splash_img2, bg=WHITE).pack(side="right")
         except Exception as e:
             print(f"Could not load image: {e}")
 
