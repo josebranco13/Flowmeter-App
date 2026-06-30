@@ -8,9 +8,13 @@ from datetime import datetime, timezone
 from threading import Event
 from typing import Any, Mapping
 from uuid import NAMESPACE_URL, uuid4, uuid5
+from pathlib import Path
 
 
 DEFAULT_TOPIC = "flowmeter/measurements"
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+MQTT_CONFIG_PATH = BASE_DIR / "data" / "mqtt_config.json"
 
 
 class MqttError(RuntimeError):
@@ -56,40 +60,58 @@ class MqttSettings:
     publish_timeout_seconds: float = 8.0
 
     @classmethod
-    def from_environment(cls) -> "MqttSettings":
-        broker_host = os.getenv("FLOWMETER_MQTT_BROKER", "").strip()
-        if not broker_host:
+    def from_file(cls) -> "MqttSettings":
+        if not MQTT_CONFIG_PATH.exists():
             raise MqttConfigurationError(
-                "O broker MQTT não está configurado. "
-                "Defina FLOWMETER_MQTT_BROKER."
+                f"O ficheiro de configuração MQTT não existe: "
+                f"{MQTT_CONFIG_PATH}"
             )
 
         try:
-            broker_port = int(os.getenv("FLOWMETER_MQTT_PORT", "1883"))
-        except ValueError as error:
+            with MQTT_CONFIG_PATH.open("r", encoding="utf-8") as file:
+                data = json.load(file)
+        except (OSError, json.JSONDecodeError) as error:
             raise MqttConfigurationError(
-                "FLOWMETER_MQTT_PORT tem de ser um número inteiro."
+                "Não foi possível ler o ficheiro de configuração MQTT."
             ) from error
 
-        topic = os.getenv("FLOWMETER_MQTT_TOPIC", DEFAULT_TOPIC).strip()
-        if not topic:
-            raise MqttConfigurationError("O tópico MQTT não pode estar vazio.")
+        broker_host = str(data.get("broker_host", "")).strip()
 
-        username = os.getenv("FLOWMETER_MQTT_USERNAME")
-        password = os.getenv("FLOWMETER_MQTT_PASSWORD")
-        use_tls = _environment_boolean("FLOWMETER_MQTT_USE_TLS", False)
-        ca_cert = os.getenv("FLOWMETER_MQTT_CA_CERT")
+        if not broker_host:
+            raise MqttConfigurationError(
+                "O endereço do broker MQTT não está configurado."
+            )
+
+        try:
+            broker_port = int(data.get("broker_port", 1883))
+        except (TypeError, ValueError) as error:
+            raise MqttConfigurationError(
+                "A porta MQTT tem de ser um número inteiro."
+            ) from error
+
+        topic = str(
+            data.get("topic", "flowmeter/measurements")
+        ).strip()
+
+        if not topic:
+            raise MqttConfigurationError(
+                "O tópico MQTT não pode estar vazio."
+            )
 
         return cls(
             broker_host=broker_host,
             broker_port=broker_port,
             topic=topic,
-            username=username or None,
-            password=password or None,
-            use_tls=use_tls,
-            ca_cert=ca_cert or None,
-            sensor_id=os.getenv("FLOWMETER_SENSOR_ID", "YF-S201-01").strip(),
-            machine_id=os.getenv("FLOWMETER_MACHINE_ID", "MACHINE-01").strip(),
+            username=data.get("username") or None,
+            password=data.get("password") or None,
+            use_tls=bool(data.get("use_tls", False)),
+            ca_cert=data.get("ca_cert") or None,
+            sensor_id=str(
+                data.get("sensor_id", "YF-S201-01")
+            ).strip(),
+            machine_id=str(
+                data.get("machine_id", "MACHINE-01")
+            ).strip(),
         )
 
 
@@ -204,7 +226,7 @@ def publish_json(
     Devolve o message_id. Em caso de falha, lança MqttError.
     """
 
-    settings = settings or MqttSettings.from_environment()
+    settings = settings or MqttSettings.from_file()
 
     try:
         from paho.mqtt import client as mqtt
@@ -333,7 +355,7 @@ def publish_measurement(
     chamada pelos handlers "Enviar selecionado" ou "Enviar tudo".
     """
 
-    settings = settings or MqttSettings.from_environment()
+    settings = settings or MqttSettings.from_file()
     payload = build_measurement_payload(
         session=session,
         measurement=measurement,

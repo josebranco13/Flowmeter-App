@@ -1,0 +1,11 @@
+{
+  "broker_host": "192.168.1.50",
+  "broker_port": 1883,
+  "topic": "flowmeter/measurements",
+  "username": null,
+  "password": null,
+  "use_tls": false,
+  "ca_cert": null,
+  "sensor_id": "YF-S201-01",
+  "machine_id": "TEST-MACHINE-01"
+}
