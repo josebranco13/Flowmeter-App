@@ -261,9 +261,35 @@ class ScreensMixin:
         root = tk.Frame(self, bg=WHITE)
         root.pack(fill="both", expand=True)
 
-        content = tk.Frame(root, bg=WHITE)
-        content.pack(fill="both", expand=True)
+        # 1. BUILD THE FOOTER FIRST
+        self.build_login_footer(
+            root,
+            black_text="Voltar atrás",
+            black_command=self.go_back,
+            red_text="-",
+            red_command=self.no_action,
+        )
 
+        # 2. CREATE A CANVAS FOR SCROLLING
+        canvas = tk.Canvas(root, bg=WHITE, bd=0, highlightthickness=0)
+        canvas.pack(side="top", fill="both", expand=True)
+
+        # 3. CREATE THE CONTENT FRAME INSIDE THE CANVAS
+        content = tk.Frame(canvas, bg=WHITE)
+        
+        # FIX 1: Change anchor to "nw" (North-West) so (0,0) is the top-left corner
+        canvas_window = canvas.create_window((0, 0), window=content, anchor="nw")
+
+        def configure_canvas(event):
+            canvas.itemconfig(canvas_window, width=event.width)
+        
+        def configure_content(event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            
+        canvas.bind("<Configure>", configure_canvas)
+        content.bind("<Configure>", configure_content)
+
+        # 4. ADD YOUR TEXT LABELS
         tk.Label(
             content,
             text="Créditos",
@@ -284,22 +310,23 @@ class ScreensMixin:
                 "Prof. João Galvão\n\n\n"
                 "Colaboração técnica:\n\n"
                 "Eng. João Godinho\n"
-                "Eng. Jõao Almeida\n"
+                "Eng. João Almeida\n"
                 "Eng. Adriano Gomes"
             ),
             bg=WHITE,
             fg=PANEL_FG,
             font=("Arial", 16),
             justify="center",
-        ).pack(side="top", pady=(10, 0))
+        ).pack(side="top", pady=(10, 40)) 
 
-        self.build_login_footer(
-            root,
-            black_text="Voltar atrás",
-            black_command=self.go_back,
-            red_text="-",
-            red_command=self.no_action,
-        )
+        # 5. KEYBOARD SCROLLING BINDINGS
+        # FIX 2: Check if canvas.winfo_exists() to prevent the TclError on screen exit
+        def scroll(event, direction):
+            if self.screen == "CREDITS" and canvas.winfo_exists():
+                canvas.yview_scroll(direction, "units")
+
+        self.bind("<Up>", lambda e: scroll(e, -1), add="+")
+        self.bind("<Down>", lambda e: scroll(e, 1), add="+")
 
     def build_login_footer(
         self,
