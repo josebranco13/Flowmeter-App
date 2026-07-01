@@ -1,12 +1,16 @@
 from __future__ import annotations
 
-import math
-import random
 from dataclasses import asdict
 from datetime import datetime
 from statistics import mean
 
+from .config import (
+    FLOW_SENSOR_CALIBRATION_FACTOR,
+    FLOW_SENSOR_GPIO_PIN,
+    FLOW_SENSOR_UPDATE_MS,
+)
 from .models import MeasurementRecord
+from .testar_caudal import FlowMeterError, RPiGPIOFlowMeter
 
 
 class MeasurementMixin:
@@ -161,16 +165,20 @@ class MeasurementMixin:
         self.samples = []
         self.measurement_running = True
         self.status_text = ""
+        self.reset_flow_meter_window()
         self.show_measurement()
 
     def stop_current_measurement(self) -> None:
         self.measurement_running = False
+        self.cancel_measurement_update()
         self.show_measurement()
 
     def restart_current_measurement(self) -> None:
         self.measurement_reviewing_saved_result = False
         self.samples = []
         self.measurement_running = True
+        self.status_text = ""
+        self.reset_flow_meter_window()
         self.show_measurement()
 
     def current_measurement_display_values(self) -> dict[str, str]:
@@ -201,22 +209,85 @@ class MeasurementMixin:
             "max": self.format_flow_display(record.get("caudal_max_l_min")),
         }
 
-    def simulated_flow_sample(self) -> float:
-        assert self.session is not None
-        # Simulação simples. Quando houver sensor real, substituir este método
-        # por leitura de impulsos/GPIO ou comunicação com microcontrolador.
-        diameter_factor = (self.session.diametro_mm / 10) ** 2
-        pressure_factor = math.sqrt(max(self.session.pressao_entrada_bar, 0.1))
-        base_flow = 3.5 * diameter_factor * pressure_factor
-        noise = random.gauss(0, base_flow * 0.06)
-        drift = random.uniform(-0.15, 0.15)
-        return round(max(0.0, base_flow + noise + drift), 2)
+    def ensure_flow_meter(self) -> RPiGPIOFlowMeter | None:
+        flow_meter = getattr(self, "flow_meter", None)
+        if flow_meter is not None:
+            return flow_meter
+
+        try:
+            flow_meter = RPiGPIOFlowMeter(
+                gpio_pin=FLOW_SENSOR_GPIO_PIN,
+                calibration_factor=FLOW_SENSOR_CALIBRATION_FACTOR,
+            )
+        except (FlowMeterError, ValueError) as exc:
+            self.flow_meter_error = str(exc)
+            self.status_text = f"Sensor de caudal indisponivel: {exc}"
+            return None
+
+        self.flow_meter = flow_meter
+        self.flow_meter_error = ""
+        return flow_meter
+
+    def reset_flow_meter_window(self) -> None:
+        flow_meter = self.ensure_flow_meter()
+        if flow_meter is not None:
+            flow_meter.reset()
+
+    def read_flow_meter_sample(self) -> float | None:
+        flow_meter = self.ensure_flow_meter()
+        if flow_meter is None:
+            return None
+
+        try:
+            return round(max(0.0, flow_meter.read_flow_l_min()), 2)
+        except Exception as exc:
+            self.flow_meter_error = f"Erro ao ler caudalimetro: {exc}"
+            self.status_text = self.flow_meter_error
+            self.close_flow_meter()
+            return None
+
+    def close_flow_meter(self) -> None:
+        flow_meter = getattr(self, "flow_meter", None)
+        if flow_meter is None:
+            return
+
+        try:
+            flow_meter.close()
+        finally:
+            self.flow_meter = None
+
+    def cancel_measurement_update(self) -> None:
+        job = getattr(self, "measurement_update_job", None)
+        if job is None:
+            return
+
+        try:
+            self.after_cancel(job)
+        except Exception:
+            pass
+        finally:
+            self.measurement_update_job = None
+
+    def schedule_measurement_update(self) -> None:
+        self.cancel_measurement_update()
+        self.measurement_update_job = self.after(
+            FLOW_SENSOR_UPDATE_MS,
+            self.update_measurement_values,
+        )
 
     def update_measurement_values(self) -> None:
+        self.measurement_update_job = None
         if self.screen != "MEASURE" or not self.measurement_running:
             return
 
-        sample = self.simulated_flow_sample()
+        sample = self.read_flow_meter_sample()
+        if sample is None:
+            self.measurement_running = False
+            if not self.status_text:
+                self.status_text = "Nao foi possivel ler o caudalimetro."
+            self.show_measurement()
+            return
+
         self.samples.append(sample)
 
         current = sample
@@ -237,13 +308,14 @@ class MeasurementMixin:
                 label.configure(text=value)
 
         if self.measurement_running:
-            self.after(1000, self.update_measurement_values)
+            self.schedule_measurement_update()
 
     def finish_current_measurement(self) -> None:
         if self.session is None:
             return
         was_running = self.measurement_running
         self.measurement_running = False
+        self.cancel_measurement_update()
         if not self.current_side:
             self.current_side = self.session.lado_molde
         if not self.current_circuit:
@@ -277,7 +349,13 @@ class MeasurementMixin:
             return
 
         if not self.samples:
-            self.samples.append(self.simulated_flow_sample())
+            sample = self.read_flow_meter_sample()
+            if sample is None:
+                if not self.status_text:
+                    self.status_text = "Nao foi possivel ler o caudalimetro."
+                self.show_measurement()
+                return
+            self.samples.append(sample)
 
         record = MeasurementRecord(
             session_id=self.session.session_id,

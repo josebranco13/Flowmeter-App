@@ -1678,6 +1678,15 @@ class ScreensMixin:
                 font=("Arial", 13, "bold"),
             ).pack(fill="x", pady=(0, 4))
 
+        if self.status_text:
+            tk.Label(
+                footer_area,
+                text=self.status_text,
+                bg=WHITE,
+                fg=RED,
+                font=("Arial", 11, "bold"),
+            ).pack(fill="x", pady=(0, 4))
+
         self.build_simple_footer(
             footer_area,
             [
@@ -1695,7 +1704,8 @@ class ScreensMixin:
             padx=18,
         )
 
-        self.after(250, self.update_measurement_values)
+        if self.measurement_running:
+            self.schedule_measurement_update()
 
     def measure_value_box(
         self,

@@ -92,6 +92,9 @@ class CaudalimetroApp(
         self.samples: list[float] = []
         self.measurement_running = False
         self.measurement_reviewing_saved_result = False
+        self.flow_meter = None
+        self.flow_meter_error = ""
+        self.measurement_update_job = None
         self.last_measurement_record: dict[str, object] | None = None
         self.selected_result_index = 0
         self.result_editing = False
@@ -112,3 +115,8 @@ class CaudalimetroApp(
             self.state("zoomed")
         except tk.TclError:
             self.attributes("-zoomed", True)
+
+    def destroy(self) -> None:
+        self.cancel_measurement_update()
+        self.close_flow_meter()
+        super().destroy()
