@@ -181,18 +181,27 @@ class MeasurementMixin:
         self.reset_flow_meter_window()
         self.show_measurement()
 
+    def flow_stat_samples(self) -> list[float]:
+        return [sample for sample in self.samples if sample > 0]
+
     def current_measurement_display_values(self) -> dict[str, str]:
         if self.samples:
             current = self.samples[-1]
-            minimum = min(self.samples)
-            average = mean(self.samples)
-            maximum = max(self.samples)
-            return {
+            values = {
                 "current": self.format_flow_display(current),
-                "min": self.format_flow_display(minimum),
-                "avg": self.format_flow_display(average),
-                "max": self.format_flow_display(maximum),
             }
+            stat_samples = self.flow_stat_samples()
+            if stat_samples:
+                values.update(
+                    {
+                        "min": self.format_flow_display(min(stat_samples)),
+                        "avg": self.format_flow_display(mean(stat_samples)),
+                        "max": self.format_flow_display(max(stat_samples)),
+                    }
+                )
+            else:
+                values.update({"min": "-", "avg": "-", "max": "-"})
+            return values
 
         record = self.measurement_record_for_circuit(
             self.current_side,
@@ -291,17 +300,22 @@ class MeasurementMixin:
         self.samples.append(sample)
 
         current = sample
-        minimum = min(self.samples)
-        average = mean(self.samples)
-        maximum = max(self.samples)
-
         values = {
             "current": self.format_flow_display(current),
-            "min": self.format_flow_display(minimum),
-            "avg": self.format_flow_display(average),
-            "max": self.format_flow_display(maximum),
-            "samples": str(len(self.samples)),
         }
+        stat_samples = self.flow_stat_samples()
+        if stat_samples:
+            values.update(
+                {
+                    "min": self.format_flow_display(min(stat_samples)),
+                    "avg": self.format_flow_display(mean(stat_samples)),
+                    "max": self.format_flow_display(max(stat_samples)),
+                    "samples": str(len(stat_samples)),
+                }
+            )
+        else:
+            values.update({"min": "-", "avg": "-", "max": "-", "samples": "0"})
+
         for key, value in values.items():
             label = self.measure_labels.get(key)
             if label is not None:
@@ -357,6 +371,12 @@ class MeasurementMixin:
                 return
             self.samples.append(sample)
 
+        stat_samples = self.flow_stat_samples()
+        if not stat_samples:
+            self.status_text = "Nao existem valores positivos para guardar."
+            self.show_measurement()
+            return
+
         record = MeasurementRecord(
             session_id=self.session.session_id,
             operador=self.session.operador,
@@ -365,10 +385,10 @@ class MeasurementMixin:
             pressao_entrada_bar=self.session.pressao_entrada_bar,
             lado=self.current_side,
             circuito=self.current_circuit,
-            caudal_min_l_min=round(min(self.samples), 2),
-            caudal_medio_l_min=round(mean(self.samples), 2),
-            caudal_max_l_min=round(max(self.samples), 2),
-            amostras=len(self.samples),
+            caudal_min_l_min=round(min(stat_samples), 2),
+            caudal_medio_l_min=round(mean(stat_samples), 2),
+            caudal_max_l_min=round(max(stat_samples), 2),
+            amostras=len(stat_samples),
             medido_em=datetime.now().isoformat(timespec="seconds"),
         )
         record_data = asdict(record)
