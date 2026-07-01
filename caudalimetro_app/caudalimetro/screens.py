@@ -1508,7 +1508,7 @@ class ScreensMixin:
             self.circuit_input_row(
                 form,
                 1,
-                "Circuito inicial :",
+                "Nº do circuito inicial :",
                 self.circuit_inputs["start"],
                 "circuit_start",
                 self.circuit_active_field == 1,
