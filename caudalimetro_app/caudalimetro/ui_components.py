@@ -27,9 +27,9 @@ class UiComponentsMixin:
         confirm_text: str = "Confirmar",
         back_text: str = "Voltar",
         back_command=None,
-        delete_text: str = "Apagar",
+        delete_text: str | None = "Apagar",
         delete_command=None,
-        select_text: str = "Selecionar",
+        select_text: str | None = "Selecionar",
         select_command=None,
         confirm_command=None,
         center_title: bool = False,
@@ -140,9 +140,9 @@ class UiComponentsMixin:
         confirm_text: str = "Confirmar",
         back_text: str = "Voltar",
         back_command=None,
-        delete_text: str = "Apagar",
+        delete_text: str | None = "Apagar",
         delete_command=None,
-        select_text: str = "Selecionar",
+        select_text: str | None = "Selecionar",
         select_command=None,
         confirm_command=None,
     ) -> None:
@@ -155,10 +155,12 @@ class UiComponentsMixin:
         confirm_command = confirm_command or self.confirm
         buttons = [
             (back_text, "#303030", WHITE, back_command),
-            (delete_text, RED, PANEL_FG, delete_command),
-            (select_text, GREEN, PANEL_FG, select_command),
-            (confirm_text, BLUE, PANEL_FG, confirm_command),
         ]
+        if delete_text is not None:
+            buttons.append((delete_text, RED, PANEL_FG, delete_command))
+        if select_text is not None:
+            buttons.append((select_text, GREEN, PANEL_FG, select_command))
+        buttons.append((confirm_text, BLUE, PANEL_FG, confirm_command))
         for text, color, fg, command in buttons:
             tk.Button(
                 footer,

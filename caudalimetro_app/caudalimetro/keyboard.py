@@ -412,7 +412,8 @@ class KeyboardMixin:
             return
 
         if self.screen == "SEND_REVIEW":
-            self.send_selected_pending_session()
+            if self.send_review_expanded_group_key is None:
+                self.send_selected_pending_session()
             return
 
         if self.screen == "ADMIN_OPERATORS":
@@ -652,8 +653,17 @@ class KeyboardMixin:
                 self.show_login()
 
         elif self.screen == "SEND_REVIEW":
+            self.last_send_error = ""
             count = self.send_pending_measurements_for_current_operator()
-            self.status_text = f"Envio concluído. Medições enviadas: {count}."
+            if count:
+                self.status_text = f"Envio concluído. Medições enviadas: {count}."
+                if self.last_send_error:
+                    self.status_text += f" {self.last_send_error}"
+            else:
+                self.status_text = (
+                    self.last_send_error
+                    or "Não foi possível enviar medições."
+                )
             self.selected_index = 0
             self.send_review_first_row = 0
             self.send_review_expanded_group_key = None

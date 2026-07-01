@@ -2129,9 +2129,11 @@ class ScreensMixin:
 
         content = tk.Frame(root, bg=WHITE)
         content.pack(fill="both", expand=True)
+        content.grid_columnconfigure(0, weight=1)
+        content.grid_rowconfigure(0, weight=1)
 
         info = tk.Frame(content, bg=WHITE)
-        info.pack(anchor="nw", padx=20, pady=48)
+        info.grid(row=0, column=0)
         assert self.session is not None
         rows = [
             f"Molde {self.session.molde}",
@@ -2182,7 +2184,7 @@ class ScreensMixin:
             root,
             [
                 ("Voltar atrás", "#303030", WHITE, self.go_back),
-                ("Apagar", RED, PANEL_FG, self.restart_current_side_measurements),
+                ("-", RED, PANEL_FG, lambda: None),
                 ("Guardar\nDados", GREEN, PANEL_FG, self.save_session_and_return_to_login),
                 ("Confirmar", BLUE, PANEL_FG, self.save_session_and_return_to_login),
             ],
@@ -2309,18 +2311,20 @@ class ScreensMixin:
             selected_group is not None
             and selected_group.get("_group_key") == expanded_group_key
         )
-        delete_text = "Apagar" if is_selected_group_expanded else "Expandir"
-        delete_command = (
-            self.delete_selected_pending_session
-            if is_selected_group_expanded
-            else self.toggle_selected_pending_group
-        )
+        can_select_group = not is_selected_group_expanded
         panel = self.build_base(
             "",
             "",
-            delete_text=delete_text,
-            delete_command=delete_command,
-            select_text="Enviar selecionado",
+            delete_text="Apagar" if is_selected_group_expanded else "Expandir",
+            delete_command=(
+                self.delete_selected_pending_session
+                if is_selected_group_expanded
+                else self.toggle_selected_pending_group
+            ),
+            select_text="Enviar selecionado" if can_select_group else None,
+            select_command=(
+                self.send_selected_pending_session if can_select_group else None
+            ),
             confirm_text="Enviar",
         )
         panel.configure(bg=WHITE)
@@ -3004,22 +3008,28 @@ class ScreensMixin:
         self.show_send_review()
 
     def send_selected_pending_session(self) -> None:
+        if getattr(self, "send_review_expanded_group_key", None) is not None:
+            self.status_text = "Envio selecionado desativado no detalhe. Use Enviar."
+            self.show_send_review()
+            return
+
         self.last_send_error = ""
-        
+
         selected_rows = self.selected_pending_session_rows()
         if not selected_rows:
             self.status_text = "Não existe uma medição selecionada para enviar."
             self.show_send_review()
             return
 
-        expanded_group_key = getattr(self, "send_review_expanded_group_key", None)
         sent_count = self.send_pending_measurement_rows(selected_rows)
         if sent_count:
             self.status_text = f"Medições enviadas: {sent_count}."
+            if self.last_send_error:
+                self.status_text += f" {self.last_send_error}"
             remaining_rows = self.pending_measurement_rows(self.load_pending_sessions())
             remaining_groups = self.pending_measurement_groups(remaining_rows)
             self.restore_send_review_selection_after_change(
-                remaining_groups, expanded_group_key
+                remaining_groups, None
             )
         else:
             self.status_text = (
@@ -3035,17 +3045,18 @@ class ScreensMixin:
 
     def send_pending_measurement_rows(self, rows: list[dict[str, Any]]) -> int:
         sent_count = 0
-        row_refs = sorted(
-            (
-                (str(row["_file_name"]), int(row["_measurement_index"]))
-                for row in rows
-            ),
-            key=lambda item: (item[0], item[1]),
-            reverse=True,
-        )
-        for file_name, measurement_index in row_refs:
-            if self.simulate_send_pending_measurement(file_name, measurement_index):
-                sent_count += 1
+        file_measurement_counts: dict[str, int] = {}
+        for row in rows:
+            file_name = str(row["_file_name"])
+            file_measurement_counts[file_name] = (
+                file_measurement_counts.get(file_name, 0) + 1
+            )
+
+        for file_name in sorted(file_measurement_counts, reverse=True):
+            if self.send_pending_session(file_name):
+                sent_count += file_measurement_counts[file_name]
+            else:
+                break
         return sent_count
 
     def delete_pending_measurement_rows(self, rows: list[dict[str, Any]]) -> int:

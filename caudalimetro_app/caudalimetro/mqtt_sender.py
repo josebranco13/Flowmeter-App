@@ -3,10 +3,11 @@ from __future__ import annotations
 import json
 import os
 import socket
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from threading import Event
-from typing import Any, Mapping
+from typing import Any
 from uuid import NAMESPACE_URL, uuid4, uuid5
 from pathlib import Path
 
@@ -49,6 +50,7 @@ class MqttSettings:
     broker_host: str
     broker_port: int = 1883
     topic: str = DEFAULT_TOPIC
+    additional_topics: tuple[str, ...] = ()
     username: str | None = None
     password: str | None = None
     use_tls: bool = False
@@ -58,6 +60,10 @@ class MqttSettings:
     keepalive_seconds: int = 60
     connect_timeout_seconds: float = 8.0
     publish_timeout_seconds: float = 8.0
+
+    @property
+    def publish_topics(self) -> tuple[str, ...]:
+        return (self.topic, *self.additional_topics)
 
     @classmethod
     def from_file(cls) -> "MqttSettings":
@@ -89,11 +95,9 @@ class MqttSettings:
                 "A porta MQTT tem de ser um número inteiro."
             ) from error
 
-        topic = str(
-            data.get("topic", "flowmeter/measurements")
-        ).strip()
+        topics = _mqtt_topics_from_config(data)
 
-        if not topic:
+        if not topics:
             raise MqttConfigurationError(
                 "O tópico MQTT não pode estar vazio."
             )
@@ -101,7 +105,8 @@ class MqttSettings:
         return cls(
             broker_host=broker_host,
             broker_port=broker_port,
-            topic=topic,
+            topic=topics[0],
+            additional_topics=tuple(topics[1:]),
             username=data.get("username") or None,
             password=data.get("password") or None,
             use_tls=bool(data.get("use_tls", False)),
@@ -113,6 +118,49 @@ class MqttSettings:
                 data.get("machine_id", "MACHINE-01")
             ).strip(),
         )
+
+
+def _mqtt_topic_values(value: Any) -> list[str]:
+    if value is None:
+        return []
+
+    if isinstance(value, str):
+        topic = value.strip()
+        return [topic] if topic else []
+
+    if isinstance(value, (list, tuple)):
+        topics: list[str] = []
+        for item in value:
+            topics.extend(_mqtt_topic_values(item))
+        return topics
+
+    topic = str(value).strip()
+    return [topic] if topic else []
+
+
+def _mqtt_topics_from_config(data: Mapping[str, Any]) -> list[str]:
+    topics: list[str] = []
+    topics.extend(_mqtt_topic_values(data.get("topic", DEFAULT_TOPIC)))
+    topics.extend(_mqtt_topic_values(data.get("topics")))
+    topics.extend(_mqtt_topic_values(data.get("destination_topics")))
+
+    destinations = data.get("destinations")
+    if isinstance(destinations, Mapping):
+        topics.extend(_mqtt_topic_values(destinations.get("topic")))
+        topics.extend(_mqtt_topic_values(destinations.get("topics")))
+    elif isinstance(destinations, (list, tuple)):
+        for destination in destinations:
+            if isinstance(destination, Mapping):
+                topics.extend(_mqtt_topic_values(destination.get("topic")))
+                topics.extend(_mqtt_topic_values(destination.get("topics")))
+            else:
+                topics.extend(_mqtt_topic_values(destination))
+
+    unique_topics: list[str] = []
+    for topic in topics:
+        if topic and topic not in unique_topics:
+            unique_topics.append(topic)
+    return unique_topics
 
 
 def _environment_boolean(name: str, default: bool) -> bool:
@@ -256,20 +304,28 @@ def publish_json(
         userdata: Any,
         flags: Any,
         reason_code: Any,
-        properties: Any,
+        properties: Any = None,
     ) -> None:
-        if getattr(reason_code, "is_failure", False):
+        if (
+            getattr(reason_code, "is_failure", False)
+            or isinstance(reason_code, int)
+            and reason_code != 0
+        ):
             connection_error.append(str(reason_code))
         connected.set()
 
     client_id = (
         f"flowmeter-{socket.gethostname()}-{uuid4().hex[:8]}"
     )
-    client = mqtt.Client(
-        callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
-        client_id=client_id,
-        protocol=mqtt.MQTTv311,
-    )
+    client_kwargs = {
+        "client_id": client_id,
+        "protocol": mqtt.MQTTv311,
+    }
+    if hasattr(mqtt, "CallbackAPIVersion"):
+        client_kwargs["callback_api_version"] = (
+            mqtt.CallbackAPIVersion.VERSION2
+        )
+    client = mqtt.Client(**client_kwargs)
     client.on_connect = on_connect
 
     if settings.username:
@@ -304,26 +360,29 @@ def publish_json(
                 + connection_error[0]
             )
 
-        publication = client.publish(
-            settings.topic,
-            payload=encoded_payload,
-            qos=1,
-            retain=False,
-        )
-
-        if publication.rc != mqtt.MQTT_ERR_SUCCESS:
-            raise MqttPublishError(
-                f"O pedido de publicação falhou com o código {publication.rc}."
+        for topic in settings.publish_topics:
+            publication = client.publish(
+                topic,
+                payload=encoded_payload,
+                qos=1,
+                retain=False,
             )
 
-        publication.wait_for_publish(
-            timeout=settings.publish_timeout_seconds
-        )
+            if publication.rc != mqtt.MQTT_ERR_SUCCESS:
+                raise MqttPublishError(
+                    "O pedido de publicacao para "
+                    f"{topic} falhou com o codigo {publication.rc}."
+                )
 
-        if not publication.is_published():
-            raise MqttPublishError(
-                "O broker não confirmou a publicação dentro do tempo limite."
+            publication.wait_for_publish(
+                timeout=settings.publish_timeout_seconds
             )
+
+            if not publication.is_published():
+                raise MqttPublishError(
+                    "O broker nao confirmou a publicacao para "
+                    f"{topic} dentro do tempo limite."
+                )
 
         return str(payload.get("message_id") or "")
 
@@ -352,7 +411,7 @@ def publish_measurement(
     Constrói e publica uma única medição.
 
     Esta função não é executada automaticamente. Só envia quando for
-    chamada pelos handlers "Enviar selecionado" ou "Enviar tudo".
+    chamada explicitamente por um handler de envio.
     """
 
     settings = settings or MqttSettings.from_file()

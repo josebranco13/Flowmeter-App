@@ -2,16 +2,12 @@ from __future__ import annotations
 
 import csv
 import json
-import shutil
 from copy import deepcopy
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
-from .mqtt_sender import MqttError, publish_measurement
-
-
 from .database import (
     authenticate_user,
     change_user_password,
@@ -249,25 +245,47 @@ class PersistenceMixin:
             return False
         return True
 
-    def simulate_send_pending_session(self, file_name: str) -> bool:
+    def send_pending_session(self, file_name: str) -> bool:
         loaded = self.load_pending_session_file(file_name)
         if loaded is None:
+            self.last_send_error = "Não foi possível abrir a medição."
             return False
 
         path, data = loaded
-        SENT_DIR.mkdir(parents=True, exist_ok=True)
-        sent_at = datetime.now().isoformat(timespec="seconds")
-        data["estado"] = "enviado"
-        data["atualizado_em"] = sent_at
-        data["enviado_em"] = sent_at
-        exported_data = self.session_data_for_export(data)
-        try:
-            with path.open("w", encoding="utf-8") as f:
-                json.dump(exported_data, f, ensure_ascii=False, indent=2)
-            shutil.copy2(path, SENT_DIR / path.name)
-        except OSError:
+        measurements = data.get("medicoes")
+        if not isinstance(measurements, list) or not measurements:
+            self.last_send_error = "A sessão não contém medições válidas."
             return False
+
+        sent_at = datetime.now().isoformat(timespec="seconds")
+        sent_data = deepcopy(data)
+        sent_data["estado"] = "enviado"
+        sent_data["atualizado_em"] = sent_at
+        sent_data["enviado_em"] = sent_at
+        exported_data = self.session_data_for_export(sent_data)
+
+        self.last_send_error = ""
+        SENT_DIR.mkdir(parents=True, exist_ok=True)
+        try:
+            with (SENT_DIR / path.name).open("w", encoding="utf-8") as file:
+                json.dump(
+                    exported_data,
+                    file,
+                    ensure_ascii=False,
+                    indent=2,
+                )
+
+            path.unlink()
+        except OSError:
+            self.last_send_error = (
+                "Não foi possível guardar o ficheiro em enviados ou apagar a sessão."
+            )
+            return False
+
         return True
+
+    def simulate_send_pending_session(self, file_name: str) -> bool:
+        return self.send_pending_session(file_name)
 
     def delete_pending_measurement(self, file_name: str, measurement_index: int) -> bool:
         loaded = self.load_pending_session_file(file_name)
@@ -296,21 +314,18 @@ class PersistenceMixin:
                 return False
         return True
 
-    def simulate_send_pending_measurement(
+    def send_pending_measurement(
         self,
         file_name: str,
         measurement_index: int,
     ) -> bool:
         loaded = self.load_pending_session_file(file_name)
-
         if loaded is None:
             self.last_send_error = "Não foi possível abrir a medição."
             return False
 
-        path, data = loaded
-
+        _, data = loaded
         measurements = data.get("medicoes")
-
         if not isinstance(measurements, list):
             self.last_send_error = "A sessão não contém medições válidas."
             return False
@@ -319,124 +334,31 @@ class PersistenceMixin:
             self.last_send_error = "A medição selecionada não existe."
             return False
 
-        selected_measurement = measurements[measurement_index]
+        return self.send_pending_session(file_name)
 
-        # O envio MQTT acontece apenas aqui.
-        # Esta função só é chamada pelos botões de envio.
-        try:
-            publish_measurement(
-                session=data,
-                measurement=selected_measurement,
-            )
-
-        except MqttError as error:
-            self.last_send_error = f"Erro no envio MQTT: {error}"
-            return False
-
-        # Só é marcada como enviada depois de o broker confirmar.
-        self.last_send_error = ""
-
-        SENT_DIR.mkdir(parents=True, exist_ok=True)
-
-        sent_at = datetime.now().isoformat(timespec="seconds")
-
-        if len(measurements) == 1:
-            data["estado"] = "enviado"
-            data["atualizado_em"] = sent_at
-            data["enviado_em"] = sent_at
-
-            exported_data = self.session_data_for_export(data)
-
-            try:
-                with path.open("w", encoding="utf-8") as file:
-                    json.dump(
-                        exported_data,
-                        file,
-                        ensure_ascii=False,
-                        indent=2,
-                    )
-
-                shutil.copy2(
-                    path,
-                    SENT_DIR / path.name,
-                )
-
-            except OSError:
-                self.last_send_error = (
-                    "A mensagem foi enviada, mas não foi possível "
-                    "atualizar o ficheiro local."
-                )
-                return False
-
-            return True
-
-        sent_data = data.copy()
-        sent_data["estado"] = "enviado"
-        sent_data["atualizado_em"] = sent_at
-        sent_data["enviado_em"] = sent_at
-        sent_data["medicoes"] = [selected_measurement]
-
-        sent_data = self.session_data_for_export(sent_data)
-
-        sent_name = (
-            f"{path.stem}_medicao_{measurement_index + 1}_"
-            f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_"
-            f"{uuid4().hex[:6]}.json"
-        )
-
-        try:
-            with (SENT_DIR / sent_name).open(
-                "w",
-                encoding="utf-8",
-            ) as file:
-                json.dump(
-                    sent_data,
-                    file,
-                    ensure_ascii=False,
-                    indent=2,
-                )
-
-            measurements.pop(measurement_index)
-            data["atualizado_em"] = sent_at
-
-            with path.open("w", encoding="utf-8") as file:
-                json.dump(
-                    data,
-                    file,
-                    ensure_ascii=False,
-                    indent=2,
-                )
-
-        except OSError:
-            self.last_send_error = (
-                "A mensagem foi enviada, mas não foi possível "
-                "atualizar o ficheiro local."
-            )
-            return False
-
-        return True
+    def simulate_send_pending_measurement(
+        self,
+        file_name: str,
+        measurement_index: int,
+    ) -> bool:
+        return self.send_pending_measurement(file_name, measurement_index)
 
     def simulate_send_pending_sessions(self) -> int:
         SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
-        SENT_DIR.mkdir(parents=True, exist_ok=True)
         sent_count = 0
         for path in SESSIONS_DIR.glob("*.json"):
-            try:
-                with path.open("r", encoding="utf-8") as f:
-                    data = json.load(f)
-            except (OSError, json.JSONDecodeError):
+            loaded = self.load_pending_session_file(path.name)
+            if loaded is None:
                 continue
-            if not isinstance(data, dict):
+            _, data = loaded
+            measurements = data.get("medicoes")
+            if not isinstance(measurements, list) or not measurements:
                 continue
-            if data.get("enviado_em"):
+
+            if self.send_pending_session(path.name):
+                sent_count += len(measurements)
                 continue
-            data["estado"] = "enviado"
-            data["enviado_em"] = datetime.now().isoformat(timespec="seconds")
-            exported_data = self.session_data_for_export(data)
-            with path.open("w", encoding="utf-8") as f:
-                json.dump(exported_data, f, ensure_ascii=False, indent=2)
-            shutil.copy2(path, SENT_DIR / path.name)
-            sent_count += 1
+            return sent_count
         return sent_count
 
     def load_pending_sessions(self) -> list[dict[str, Any]]:
