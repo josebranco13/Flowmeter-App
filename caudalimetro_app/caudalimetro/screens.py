@@ -430,7 +430,7 @@ class ScreensMixin:
         menu_content = tk.Frame(panel, bg=WHITE)
         menu_content.pack(expand=True, anchor="center")
 
-        for i, option in enumerate(("Operadores", "Enviar dados")):
+        for i, option in enumerate(("Operadores", "Confirmar dados")):
             label = tk.Label(
                 menu_content,
                 text=option,
@@ -899,7 +899,7 @@ class ScreensMixin:
         )
         panel.configure(bg=WHITE)
         menu_content = tk.Frame(panel, bg=WHITE)
-        menu_content.pack(expand=True)
+        menu_content.pack(expand=True, anchor="center")
 
         tk.Label(
             menu_content,
@@ -912,14 +912,14 @@ class ScreensMixin:
             label = tk.Label(
                 menu_content,
                 text=option,
-                pady=8,
-                padx=10,
+                pady=18,
+                padx=36,
                 anchor="center",
                 width=34,
             )
-            label.option_font_size = 14
+            label.option_font_size = 20
             self.style_option_label(label, i == self.selected_index)
-            label.pack(pady=5)
+            label.pack(fill="x", pady=8)
             self.option_labels.append(label)
 
     def logout_to_login(self) -> None:
@@ -2304,7 +2304,7 @@ class ScreensMixin:
                         pady=4,
                     ).grid(row=row, column=col, padx=1, pady=1)
 
-        options = ["Nova operação", "Enviar dados", "Terminar sessão"]
+        options = ["Nova operação", "Confirmar dados", "Terminar sessão"]
         for i, option in enumerate(options):
             self.option_row(panel, option, i == self.selected_index)
 
@@ -2331,11 +2331,11 @@ class ScreensMixin:
                 if is_selected_group_expanded
                 else self.toggle_selected_pending_group
             ),
-            select_text="Enviar selecionado" if can_select_group else None,
+            select_text="Confirmar selecionado" if can_select_group else None,
             select_command=(
                 self.send_selected_pending_session if can_select_group else None
             ),
-            confirm_text="Enviar",
+            confirm_text="Confirmar",
         )
         panel.configure(bg=WHITE)
         session_count = self.pending_review_session_count(rows)
@@ -3019,7 +3019,7 @@ class ScreensMixin:
 
     def send_selected_pending_session(self) -> None:
         if getattr(self, "send_review_expanded_group_key", None) is not None:
-            self.status_text = "Envio selecionado desativado no detalhe. Use Enviar."
+            self.status_text = "Envio selecionado desativado no detalhe. Use Confirmar."
             self.show_send_review()
             return
 
