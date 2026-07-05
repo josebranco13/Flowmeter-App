@@ -21,6 +21,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 SESSIONS_DIR = DATA_DIR / "sessoes"
 SENT_DIR = DATA_DIR / "enviados"
+PDF_EXPORTS_DIR = DATA_DIR / "pdf_exportados"
 CSV_PATH = DATA_DIR / "medicoes.csv"
 
 DIAMETER_OPTIONS = [3, 6, 10, 12, 20]

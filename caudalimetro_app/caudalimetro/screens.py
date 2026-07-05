@@ -450,9 +450,8 @@ class ScreensMixin:
 
     def show_exported_records(self) -> None:
         self.screen = "EXPORTED_RECORDS"
-        sessions = self.load_exported_sessions()
-        rows = self.pending_measurement_rows(sessions)
-        groups = self.pending_measurement_groups(rows)
+        records = self.load_exported_pdf_records()
+        total_measurements = sum(int(item.get("medicoes") or 0) for item in records)
         panel = self.build_base(
             "",
             "",
@@ -474,16 +473,19 @@ class ScreensMixin:
         ).pack(pady=(18, 6))
         tk.Label(
             panel,
-            text=f"Sessões: {len(sessions)} | Grupos: {len(groups)} | Medições: {len(rows)}",
+            text=(
+                f"Ficheiros: {len(records)} | Moldes: {len(records)} | "
+                f"Medições: {total_measurements}"
+            ),
             bg=WHITE,
-            fg=BLUE if rows else GREEN,
+            fg=BLUE if records else GREEN,
             font=("Arial", 14, "bold"),
         ).pack(pady=(0, 12))
 
-        if not groups:
+        if not records:
             tk.Label(
                 panel,
-                text="Não existem registos exportados.",
+                text="Não existem ficheiros PDF exportados.",
                 bg=WHITE,
                 fg="#555555",
                 font=("Arial", 13),
@@ -493,11 +495,11 @@ class ScreensMixin:
         table = tk.Frame(panel, bg=WHITE)
         table.pack(fill="x", padx=24, pady=(0, 0))
         headers = [
-            ("Data", 16),
-            ("Operador", 14),
-            ("Molde", 12),
-            ("Lado", 14),
-            ("Nº circuitos", 12),
+            ("Data", 15),
+            ("Operador", 16),
+            ("Molde", 11),
+            ("Nome do ficheiro", 28),
+            ("Tamanho", 10),
         ]
         for col, (header, width) in enumerate(headers):
             table.grid_columnconfigure(col, weight=width)
@@ -512,13 +514,13 @@ class ScreensMixin:
             ).grid(row=0, column=col, padx=1, sticky="ew")
 
         max_rows = self.send_review_visible_row_count()
-        for row_index, item in enumerate(groups[:max_rows], start=1):
+        for row_index, item in enumerate(records[:max_rows], start=1):
             values = [
                 item["data"],
-                item["operador"],
-                item["molde"],
-                item["lado"],
-                item["circuito"],
+                self.short_table_text(item["operador"], 16),
+                self.short_table_text(item["molde"], 11),
+                self.short_table_text(item["ficheiro"], 28),
+                self.format_file_size(item["tamanho_bytes"]),
             ]
             for col, value in enumerate(values):
                 tk.Label(
@@ -2434,7 +2436,7 @@ class ScreensMixin:
             ),
             confirm_text="Exportar PDF" if show_checkboxes else "Expandir",
             confirm_command=(
-                None
+                self.confirm_checked_pending_sessions
                 if show_checkboxes
                 else (
                     (lambda: None)
@@ -2465,7 +2467,21 @@ class ScreensMixin:
             bg=WHITE,
             fg=BLUE if rows else GREEN,
             font=("Arial", 14, "bold"),
-        ).pack(pady=(0, 12))
+        ).pack(pady=(0, 6 if self.status_text else 12))
+
+        if self.status_text:
+            status_lower = self.status_text.casefold()
+            is_error = any(
+                term in status_lower
+                for term in ("não", "nao", "selecione", "permitida", "erro")
+            )
+            tk.Label(
+                panel,
+                text=self.status_text,
+                bg=WHITE,
+                fg=RED if is_error else GREEN,
+                font=("Arial", 10, "bold"),
+            ).pack(pady=(0, 6))
 
         if groups:
             display_rows = self.pending_review_display_rows(groups)
@@ -3223,31 +3239,20 @@ class ScreensMixin:
         self.show_send_review()
 
     def confirm_checked_pending_sessions(self) -> None:
-        self.last_send_error = ""
         selected_rows = self.checked_pending_session_rows()
-        if not selected_rows:
-            self.status_text = "Selecione pelo menos uma medicao."
-            self.show_send_review()
-            return
-
-        sent_count = self.send_pending_measurement_rows(selected_rows)
-        if sent_count:
-            self.status_text = f"Envio concluido. Medicoes enviadas: {sent_count}."
-            if self.last_send_error:
-                self.status_text += f" {self.last_send_error}"
+        success, message, _record = self.export_pending_measurement_rows_to_pdf(
+            selected_rows
+        )
+        self.status_text = message
+        if success:
             self.selected_index = 0
             self.send_review_first_row = 0
             self.send_review_expanded_group_key = None
             self.send_review_selected_measurement_ref = None
+            self.checked_send_review_group_keys().clear()
             remaining_rows = self.pending_measurement_rows(self.load_pending_sessions())
             remaining_groups = self.pending_measurement_groups(remaining_rows)
             self.restore_send_review_selection_after_change(remaining_groups, None)
-            self.prune_send_review_checked_groups(remaining_groups)
-        else:
-            self.status_text = (
-                self.last_send_error
-                or "Nao foi possivel enviar as medicoes selecionadas."
-            )
         self.show_send_review()
 
     def confirm_current_operator_pending_sessions(self) -> None:

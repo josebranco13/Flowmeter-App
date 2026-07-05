@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import csv
 import json
+import os
+import re
 from copy import deepcopy
 from dataclasses import asdict
 from datetime import datetime
@@ -18,10 +20,12 @@ from .database import (
 from .config import (
     CSV_PATH,
     DIAMETER_LABELS,
+    PDF_EXPORTS_DIR,
     SENT_DIR,
     SESSIONS_DIR,
 )
 from .models import MeasurementRecord, MeasurementSession
+from .pdf_exporter import generate_flow_report
 
 
 class PersistenceMixin:
@@ -416,6 +420,404 @@ class PersistenceMixin:
             ),
             reverse=True,
         )
+
+
+    @staticmethod
+    def safe_pdf_file_component(value: Any) -> str:
+        text = str(value or "").strip()
+        text = re.sub(r"[^A-Za-z0-9._-]+", "_", text)
+        text = text.strip("._-")
+        return text or "molde"
+
+    @staticmethod
+    def measurement_export_identity(measurement: dict[str, Any]) -> tuple[str, str, str, str]:
+        return (
+            str(measurement.get("session_id") or measurement.get("_source_file") or ""),
+            str(measurement.get("lado") or "").casefold(),
+            str(measurement.get("circuito") or ""),
+            str(measurement.get("medido_em") or ""),
+        )
+
+    def measurement_payloads_for_rows(
+        self, rows: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        payloads: list[dict[str, Any]] = []
+        loaded_by_file: dict[str, dict[str, Any]] = {}
+        seen_refs: set[tuple[str, int]] = set()
+        inherited_fields = (
+            "session_id",
+            "operador",
+            "molde",
+            "diametro_mm",
+            "pressao_entrada_bar",
+        )
+
+        for row in rows:
+            file_name = str(row.get("_file_name") or "")
+            try:
+                measurement_index = int(row.get("_measurement_index"))
+            except (TypeError, ValueError):
+                continue
+            ref = (file_name, measurement_index)
+            if not file_name or ref in seen_refs:
+                continue
+            seen_refs.add(ref)
+
+            session = loaded_by_file.get(file_name)
+            if session is None:
+                loaded = self.load_pending_session_file(file_name)
+                if loaded is None:
+                    continue
+                _, session = loaded
+                loaded_by_file[file_name] = session
+
+            measurements = session.get("medicoes")
+            if not isinstance(measurements, list):
+                continue
+            if measurement_index < 0 or measurement_index >= len(measurements):
+                continue
+            source = measurements[measurement_index]
+            if not isinstance(source, dict):
+                continue
+
+            payload = deepcopy(source)
+
+            for field in inherited_fields:
+                session_value = session.get(field)
+
+                if session_value not in (None, ""):
+                    payload[field] = session_value
+                elif payload.get(field) in (None, ""):
+                    payload[field] = session_value
+                    
+            if payload.get("lado") in (None, ""):
+                payload["lado"] = session.get("lado_molde")
+            payload["_source_file"] = file_name
+            payloads.append(payload)
+
+        return payloads
+
+    @staticmethod
+    def recompute_session_side_totals(data: dict[str, Any]) -> None:
+        measurements = data.get("medicoes")
+        if not isinstance(measurements, list):
+            data["circuitos_por_lado"] = {}
+            data["circuitos_inicio_por_lado"] = {}
+            return
+
+        counts: dict[str, int] = {}
+        starts: dict[str, int] = {}
+        for measurement in measurements:
+            if not isinstance(measurement, dict):
+                continue
+            side = str(measurement.get("lado") or "").strip()
+            if not side:
+                continue
+            counts[side] = counts.get(side, 0) + 1
+            try:
+                circuit = int(measurement.get("circuito"))
+            except (TypeError, ValueError):
+                continue
+            starts[side] = min(starts.get(side, circuit), circuit)
+
+        data["circuitos_por_lado"] = counts
+        data["circuitos_inicio_por_lado"] = starts
+        if counts:
+            data["lado_molde"] = next(iter(counts))
+
+    def unique_sent_json_path(self, preferred_name: str, exported_at: str) -> Path:
+        preferred = SENT_DIR / Path(preferred_name).name
+        if not preferred.exists():
+            return preferred
+        timestamp = exported_at.replace("-", "").replace(":", "").replace("T", "_")
+        base = preferred.stem
+        candidate = SENT_DIR / f"{base}__pdf_{timestamp}{preferred.suffix}"
+        counter = 2
+        while candidate.exists():
+            candidate = SENT_DIR / f"{base}__pdf_{timestamp}_{counter}{preferred.suffix}"
+            counter += 1
+        return candidate
+
+    def archive_pdf_export_rows(
+        self,
+        rows: list[dict[str, Any]],
+        *,
+        pdf_file_name: str,
+        exported_at: str,
+    ) -> int:
+        refs_by_file: dict[str, set[int]] = {}
+        for row in rows:
+            file_name = str(row.get("_file_name") or "")
+            try:
+                index = int(row.get("_measurement_index"))
+            except (TypeError, ValueError):
+                continue
+            refs_by_file.setdefault(file_name, set()).add(index)
+
+        plans: list[tuple[Path, Path, dict[str, Any] | None, dict[str, Any]]] = []
+        for file_name, selected_indices in refs_by_file.items():
+            loaded = self.load_pending_session_file(file_name)
+            if loaded is None:
+                raise OSError(f"Não foi possível abrir {file_name}.")
+            source_path, data = loaded
+            measurements = data.get("medicoes")
+            if not isinstance(measurements, list):
+                raise OSError(f"A sessão {file_name} não contém medições válidas.")
+
+            selected = [
+                deepcopy(measurement)
+                for index, measurement in enumerate(measurements)
+                if index in selected_indices and isinstance(measurement, dict)
+            ]
+            remaining = [
+                deepcopy(measurement)
+                for index, measurement in enumerate(measurements)
+                if index not in selected_indices
+            ]
+            if not selected:
+                continue
+
+            exported_data = deepcopy(data)
+            exported_data["medicoes"] = selected
+            exported_data["estado"] = "exportado_pdf"
+            exported_data["atualizado_em"] = exported_at
+            exported_data["enviado_em"] = exported_at
+            exported_data["pdf_ficheiro"] = pdf_file_name
+            exported_data = self.session_data_for_export(exported_data)
+            sent_path = self.unique_sent_json_path(source_path.name, exported_at)
+
+            pending_data: dict[str, Any] | None = None
+            if remaining:
+                pending_data = deepcopy(data)
+                pending_data["medicoes"] = remaining
+                pending_data["atualizado_em"] = exported_at
+                self.recompute_session_side_totals(pending_data)
+
+            plans.append((source_path, sent_path, pending_data, exported_data))
+
+        if not plans:
+            return 0
+
+        SENT_DIR.mkdir(parents=True, exist_ok=True)
+        temp_files: list[Path] = []
+        try:
+            prepared: list[tuple[Path, Path, Path, Path | None, dict[str, Any] | None]] = []
+            for source_path, sent_path, pending_data, exported_data in plans:
+                sent_temp = sent_path.with_name(f".{sent_path.name}.{uuid4().hex}.tmp")
+                with sent_temp.open("w", encoding="utf-8") as file:
+                    json.dump(exported_data, file, ensure_ascii=False, indent=2)
+                temp_files.append(sent_temp)
+
+                pending_temp: Path | None = None
+                if pending_data is not None:
+                    pending_temp = source_path.with_name(
+                        f".{source_path.name}.{uuid4().hex}.tmp"
+                    )
+                    with pending_temp.open("w", encoding="utf-8") as file:
+                        json.dump(pending_data, file, ensure_ascii=False, indent=2)
+                    temp_files.append(pending_temp)
+                prepared.append(
+                    (source_path, sent_path, sent_temp, pending_temp, pending_data)
+                )
+
+            for source_path, sent_path, sent_temp, pending_temp, pending_data in prepared:
+                os.replace(sent_temp, sent_path)
+                temp_files.remove(sent_temp)
+                if pending_data is None:
+                    source_path.unlink()
+                elif pending_temp is not None:
+                    os.replace(pending_temp, source_path)
+                    temp_files.remove(pending_temp)
+        finally:
+            for temp_path in temp_files:
+                try:
+                    temp_path.unlink()
+                except OSError:
+                    pass
+
+        return sum(len(indices) for indices in refs_by_file.values())
+
+    def export_pending_measurement_rows_to_pdf(
+        self, rows: list[dict[str, Any]]
+    ) -> tuple[bool, str, dict[str, Any] | None]:
+        if not rows:
+            return False, "Selecione pelo menos uma medição.", None
+
+        payloads = self.measurement_payloads_for_rows(rows)
+        if not payloads:
+            return False, "Não foi possível ler as medições selecionadas.", None
+
+        mold_values = {
+            str(item.get("molde") or "").strip()
+            for item in payloads
+            if str(item.get("molde") or "").strip()
+        }
+        normalized_molds = {value.casefold() for value in mold_values}
+        if len(normalized_molds) != 1:
+            return (
+                False,
+                "A exportação só é permitida para um único molde. "
+                "Selecione um lado ou vários lados do mesmo molde.",
+                None,
+            )
+        mold = sorted(mold_values, key=str.casefold)[0]
+
+        PDF_EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
+        safe_mold = self.safe_pdf_file_component(mold)
+        pdf_path = PDF_EXPORTS_DIR / f"Registo_Caudais_{safe_mold}.pdf"
+        manifest_path = PDF_EXPORTS_DIR / f"Registo_Caudais_{safe_mold}.json"
+        exported_at = datetime.now().isoformat(timespec="seconds")
+
+        manifest: dict[str, Any] = {}
+        if manifest_path.exists():
+            try:
+                with manifest_path.open("r", encoding="utf-8") as file:
+                    loaded_manifest = json.load(file)
+                if isinstance(loaded_manifest, dict):
+                    manifest = loaded_manifest
+            except (OSError, json.JSONDecodeError):
+                manifest = {}
+
+        previous_measurements = manifest.get("medicoes")
+        if not isinstance(previous_measurements, list):
+            previous_measurements = []
+
+        merged_by_identity: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+        for measurement in [*previous_measurements, *payloads]:
+            if not isinstance(measurement, dict):
+                continue
+            merged_by_identity[self.measurement_export_identity(measurement)] = deepcopy(
+                measurement
+            )
+        merged_measurements = sorted(
+            merged_by_identity.values(),
+            key=lambda item: (
+                str(item.get("lado") or "").casefold(),
+                int(item.get("circuito") or 0),
+                str(item.get("medido_em") or ""),
+            ),
+        )
+
+        measurements_for_json = deepcopy(merged_measurements)
+
+        for measurement in measurements_for_json:
+            if not isinstance(measurement, dict):
+                continue
+
+            if "diametro_mm" in measurement:
+                measurement["diametro_mm"] = self.export_diameter_value(
+                    measurement.get("diametro_mm")
+                )
+
+        operators = sorted(
+            {
+                str(item.get("operador") or "").strip()
+                for item in merged_measurements
+                if str(item.get("operador") or "").strip()
+            },
+            key=str.casefold,
+        )
+        new_manifest = {
+            "molde": mold,
+            "ficheiro": pdf_path.name,
+            "criado_em": manifest.get("criado_em") or exported_at,
+            "atualizado_em": exported_at,
+            "operadores": operators,
+            "medicoes": merged_measurements,
+        }
+
+        temp_pdf = pdf_path.with_name(f".{pdf_path.name}.{uuid4().hex}.tmp.pdf")
+        temp_manifest = manifest_path.with_name(
+            f".{manifest_path.name}.{uuid4().hex}.tmp"
+        )
+        try:
+            generate_flow_report(
+                temp_pdf,
+                mold=mold,
+                measurements=merged_measurements,
+                exported_at=exported_at,
+            )
+            with temp_manifest.open("w", encoding="utf-8") as file:
+                json.dump(new_manifest, file, ensure_ascii=False, indent=2)
+
+            archived_count = self.archive_pdf_export_rows(
+                rows,
+                pdf_file_name=pdf_path.name,
+                exported_at=exported_at,
+            )
+            if archived_count <= 0:
+                raise OSError("Nenhuma medição foi arquivada.")
+
+            os.replace(temp_pdf, pdf_path)
+            os.replace(temp_manifest, manifest_path)
+        except (OSError, ValueError) as exc:
+            for temp_path in (temp_pdf, temp_manifest):
+                try:
+                    temp_path.unlink()
+                except OSError:
+                    pass
+            return False, f"Não foi possível exportar o PDF: {exc}", None
+
+        record = {
+            "data": exported_at.replace("T", " ")[:16],
+            "operador": ", ".join(operators) or "-",
+            "molde": mold,
+            "ficheiro": pdf_path.name,
+            "tamanho_bytes": pdf_path.stat().st_size,
+            "medicoes": len(merged_measurements),
+        }
+        return True, f"PDF exportado: {pdf_path.name}", record
+
+    def load_exported_pdf_records(self) -> list[dict[str, Any]]:
+        PDF_EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
+        records: list[dict[str, Any]] = []
+        for manifest_path in PDF_EXPORTS_DIR.glob("Registo_Caudais_*.json"):
+            try:
+                with manifest_path.open("r", encoding="utf-8") as file:
+                    manifest = json.load(file)
+            except (OSError, json.JSONDecodeError):
+                continue
+            if not isinstance(manifest, dict):
+                continue
+
+            pdf_name = str(manifest.get("ficheiro") or "")
+            pdf_path = PDF_EXPORTS_DIR / Path(pdf_name).name
+            if not pdf_name or not pdf_path.exists():
+                continue
+            operators = manifest.get("operadores")
+            if not isinstance(operators, list):
+                operators = []
+            measurements = manifest.get("medicoes")
+            records.append(
+                {
+                    "data": str(
+                        manifest.get("atualizado_em")
+                        or manifest.get("criado_em")
+                        or "-"
+                    ).replace("T", " ")[:16],
+                    "operador": ", ".join(str(item) for item in operators) or "-",
+                    "molde": str(manifest.get("molde") or "-"),
+                    "ficheiro": pdf_path.name,
+                    "tamanho_bytes": pdf_path.stat().st_size,
+                    "medicoes": len(measurements) if isinstance(measurements, list) else 0,
+                }
+            )
+
+        return sorted(records, key=lambda item: item["data"], reverse=True)
+
+    @staticmethod
+    def format_file_size(size_bytes: Any) -> str:
+        try:
+            size = float(size_bytes)
+        except (TypeError, ValueError):
+            return "-"
+        units = ("B", "KB", "MB", "GB")
+        unit = units[0]
+        for unit in units:
+            if size < 1024 or unit == units[-1]:
+                break
+            size /= 1024
+        return f"{size:.1f} {unit}" if unit != "B" else f"{int(size)} B"
 
     def pending_sessions_count(self) -> int:
         return len(self.load_pending_sessions())

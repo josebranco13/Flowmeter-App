@@ -9,6 +9,7 @@ from .config import (
     DATA_DIR,
     DIAMETER_OPTIONS,
     MENU_OPTIONS,
+    PDF_EXPORTS_DIR,
     SENT_DIR,
     SESSIONS_DIR,
 )
@@ -45,6 +46,7 @@ class CaudalimetroApp(
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
         SENT_DIR.mkdir(parents=True, exist_ok=True)
+        PDF_EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
         initialize_database()
 
         self.screen = ""
