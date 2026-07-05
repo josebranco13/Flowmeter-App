@@ -59,6 +59,7 @@ class PersistenceMixin:
         self.selected_mold_side_index = 0
         self.mold_side_dropdown_open = False
         self.selected_index = 0
+        self.send_review_checked_group_keys = set()
         self.status_text = ""
 
     def logout(self) -> None:

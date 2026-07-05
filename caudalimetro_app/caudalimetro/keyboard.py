@@ -413,7 +413,7 @@ class KeyboardMixin:
 
         if self.screen == "SEND_REVIEW":
             if self.send_review_expanded_group_key is None:
-                self.send_selected_pending_session()
+                self.toggle_selected_pending_group_checkbox()
             return
 
         if self.screen == "ADMIN_OPERATORS":
@@ -519,6 +519,7 @@ class KeyboardMixin:
                 self.send_review_first_row = 0
                 self.send_review_expanded_group_key = None
                 self.send_review_selected_measurement_ref = None
+                self.checked_send_review_group_keys().clear()
                 self.show_send_review()
 
         elif self.screen == "ADMIN_MENU":
@@ -531,6 +532,7 @@ class KeyboardMixin:
                 self.send_review_first_row = 0
                 self.send_review_expanded_group_key = None
                 self.send_review_selected_measurement_ref = None
+                self.checked_send_review_group_keys().clear()
                 self.show_send_review()
 
         elif self.screen == "MOLD":
@@ -647,28 +649,15 @@ class KeyboardMixin:
                 self.send_review_first_row = 0
                 self.send_review_expanded_group_key = None
                 self.send_review_selected_measurement_ref = None
+                self.checked_send_review_group_keys().clear()
                 self.show_send_review()
             else:
                 self.logout()
                 self.show_login()
 
         elif self.screen == "SEND_REVIEW":
-            self.last_send_error = ""
-            count = self.send_pending_measurements_for_current_operator()
-            if count:
-                self.status_text = f"Envio concluído. Medições enviadas: {count}."
-                if self.last_send_error:
-                    self.status_text += f" {self.last_send_error}"
-            else:
-                self.status_text = (
-                    self.last_send_error
-                    or "Não foi possível enviar medições."
-                )
-            self.selected_index = 0
-            self.send_review_first_row = 0
-            self.send_review_expanded_group_key = None
-            self.send_review_selected_measurement_ref = None
-            self.show_send_review()
+            self.confirm_checked_pending_sessions()
+            return
 
         elif self.screen == "ADMIN_OPERATORS":
             self.reset_selected_admin_operator_password()
@@ -757,6 +746,7 @@ class KeyboardMixin:
             self.send_review_first_row = 0
             self.send_review_expanded_group_key = None
             self.send_review_selected_measurement_ref = None
+            self.checked_send_review_group_keys().clear()
             if self.operator_id == "ADMIN":
                 self.show_admin_menu()
             else:

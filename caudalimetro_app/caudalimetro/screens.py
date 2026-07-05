@@ -2313,6 +2313,7 @@ class ScreensMixin:
         sessions = self.load_pending_sessions()
         rows = self.pending_measurement_rows(sessions)
         groups = self.pending_measurement_groups(rows)
+        self.prune_send_review_checked_groups(groups)
         if groups:
             self.normalize_pending_review_selection(groups)
         expanded_group_key = getattr(self, "send_review_expanded_group_key", None)
@@ -2331,9 +2332,9 @@ class ScreensMixin:
                 if is_selected_group_expanded
                 else self.toggle_selected_pending_group
             ),
-            select_text="Confirmar selecionado" if can_select_group else None,
+            select_text="Selecionar" if can_select_group else None,
             select_command=(
-                self.send_selected_pending_session if can_select_group else None
+                self.toggle_selected_pending_group_checkbox if can_select_group else None
             ),
             confirm_text="Confirmar",
         )
@@ -2384,6 +2385,7 @@ class ScreensMixin:
             table_area.pack(fill="x", padx=24, pady=(0, 0))
             table = tk.Frame(table_area, bg=WHITE)
             table.pack(side="left", fill="x", expand=True)
+            self.send_review_checkbox_vars = []
             self.bind_send_review_scroll(table_area)
             self.bind_send_review_scroll(table)
             if not is_expanded:
@@ -2414,7 +2416,21 @@ class ScreensMixin:
                     ("Circ.", 5),
                     ("Médio", 10),
                 ]
-            for col, (header, width) in enumerate(headers):
+            checkbox_column_width = 3
+            table.grid_columnconfigure(0, weight=checkbox_column_width)
+            checkbox_header = tk.Label(
+                table,
+                text="",
+                bg="#374151",
+                fg=WHITE,
+                font=("Arial", 10, "bold"),
+                width=checkbox_column_width,
+                pady=4,
+            )
+            checkbox_header.grid(row=0, column=0, padx=1, sticky="ew")
+            self.bind_send_review_scroll(checkbox_header)
+
+            for col, (header, width) in enumerate(headers, start=1):
                 table.grid_columnconfigure(col, weight=width)
                 header_label = tk.Label(
                     table,
@@ -2435,6 +2451,7 @@ class ScreensMixin:
                     if is_expanded
                     else item["_group_index"] == self.selected_index
                 )
+                is_checked = self.is_checked_send_review_row(item)
                 if not is_expanded:
                     values = [
                         item["data"],
@@ -2463,23 +2480,44 @@ class ScreensMixin:
                         item["circuito"],
                         item["medio"],
                     ]
-                for col, value in enumerate(values):
-                    bg = WHITE
-                    fg = PANEL_FG
-                    font_weight = "normal"
-                    if is_selected:
-                        bg = BLUE
-                        fg = WHITE
-                        font_weight = "bold"
-                    elif is_detail:
-                        bg = "#e8f4ff" if is_selected else "#f4f8fb"
+                bg = WHITE
+                fg = PANEL_FG
+                font_weight = "normal"
+                if is_selected:
+                    bg = BLUE
+                    fg = WHITE
+                    font_weight = "bold"
+                elif is_detail:
+                    bg = "#e8f4ff" if is_selected else "#f4f8fb"
+
+                checkbox_var = tk.BooleanVar(value=is_checked)
+                self.send_review_checkbox_vars.append(checkbox_var)
+                checkbox = tk.Checkbutton(
+                    table,
+                    variable=checkbox_var,
+                    bg=bg,
+                    activebackground=bg,
+                    selectcolor=WHITE,
+                    relief="flat",
+                    bd=0,
+                    borderwidth=0,
+                    highlightthickness=0,
+                    takefocus=0,
+                    pady=0,
+                )
+                checkbox.bind("<Button-1>", lambda _event: "break")
+                checkbox.bind("<ButtonRelease-1>", lambda _event: "break")
+                self.bind_send_review_scroll(checkbox)
+                checkbox.grid(row=row_index, column=0, padx=1, pady=1, sticky="nsew")
+
+                for col, value in enumerate(values, start=1):
                     cell = tk.Label(
                         table,
                         text=value,
                         bg=bg,
                         fg=fg,
                         font=("Arial", 10, font_weight),
-                        width=headers[col][1],
+                        width=headers[col - 1][1],
                         pady=4,
                     )
                     cell.bind(
@@ -2593,6 +2631,21 @@ class ScreensMixin:
     @staticmethod
     def send_review_measurement_ref(row: dict[str, Any]) -> tuple[str, int]:
         return str(row["_file_name"]), int(row["_measurement_index"])
+
+    def checked_send_review_group_keys(self) -> set[tuple[str, str, str, str]]:
+        checked_group_keys = getattr(self, "send_review_checked_group_keys", None)
+        if checked_group_keys is None:
+            checked_group_keys = set()
+            self.send_review_checked_group_keys = checked_group_keys
+        return checked_group_keys
+
+    def prune_send_review_checked_groups(self, groups: list[dict[str, Any]]) -> None:
+        valid_group_keys = {group["_group_key"] for group in groups}
+        checked_group_keys = self.checked_send_review_group_keys()
+        checked_group_keys.intersection_update(valid_group_keys)
+
+    def is_checked_send_review_row(self, row: dict[str, Any]) -> bool:
+        return row.get("_group_key") in self.checked_send_review_group_keys()
 
     def normalize_send_review_detail_selection(
         self, rows: list[dict[str, Any]]
@@ -2804,6 +2857,31 @@ class ScreensMixin:
         )
         return True
 
+    def toggle_selected_pending_group_checkbox(self) -> None:
+        rows = self.pending_measurement_rows(self.load_pending_sessions())
+        groups = self.pending_measurement_groups(rows)
+        self.prune_send_review_checked_groups(groups)
+        group = self.selected_pending_group(groups)
+        if group is None:
+            self.status_text = "Nao existe uma medicao selecionada."
+            self.show_send_review()
+            return
+
+        checked_group_keys = self.checked_send_review_group_keys()
+        group_key = group["_group_key"]
+        if group_key in checked_group_keys:
+            checked_group_keys.remove(group_key)
+        else:
+            checked_group_keys.add(group_key)
+
+        self.status_text = ""
+        display_rows = self.pending_review_display_rows(groups)
+        max_rows = self.send_review_visible_row_count()
+        self.send_review_first_row = self.send_review_first_row_for_selection(
+            display_rows, max_rows
+        )
+        self.show_send_review()
+
     def select_send_review_group(self, group_index: int) -> None:
         rows = self.pending_measurement_rows(self.load_pending_sessions())
         groups = self.pending_measurement_groups(rows)
@@ -2905,6 +2983,17 @@ class ScreensMixin:
             if int(group["_group_index"]) == self.selected_index:
                 return group
         return None
+
+    def checked_pending_session_rows(self) -> list[dict[str, Any]]:
+        rows = self.pending_measurement_rows(self.load_pending_sessions())
+        groups = self.pending_measurement_groups(rows)
+        self.prune_send_review_checked_groups(groups)
+        checked_group_keys = self.checked_send_review_group_keys()
+        selected_rows: list[dict[str, Any]] = []
+        for group in groups:
+            if group["_group_key"] in checked_group_keys:
+                selected_rows.extend(group["_rows"])
+        return selected_rows
 
     def selected_pending_session_rows(self) -> list[dict[str, Any]]:
         rows = self.pending_measurement_rows(self.load_pending_sessions())
@@ -3015,6 +3104,34 @@ class ScreensMixin:
             )
         else:
             self.status_text = "Não foi possível apagar a medição selecionada."
+        self.show_send_review()
+
+    def confirm_checked_pending_sessions(self) -> None:
+        self.last_send_error = ""
+        selected_rows = self.checked_pending_session_rows()
+        if not selected_rows:
+            self.status_text = "Selecione pelo menos uma medicao."
+            self.show_send_review()
+            return
+
+        sent_count = self.send_pending_measurement_rows(selected_rows)
+        if sent_count:
+            self.status_text = f"Envio concluido. Medicoes enviadas: {sent_count}."
+            if self.last_send_error:
+                self.status_text += f" {self.last_send_error}"
+            self.selected_index = 0
+            self.send_review_first_row = 0
+            self.send_review_expanded_group_key = None
+            self.send_review_selected_measurement_ref = None
+            remaining_rows = self.pending_measurement_rows(self.load_pending_sessions())
+            remaining_groups = self.pending_measurement_groups(remaining_rows)
+            self.restore_send_review_selection_after_change(remaining_groups, None)
+            self.prune_send_review_checked_groups(remaining_groups)
+        else:
+            self.status_text = (
+                self.last_send_error
+                or "Nao foi possivel enviar as medicoes selecionadas."
+            )
         self.show_send_review()
 
     def send_selected_pending_session(self) -> None:
