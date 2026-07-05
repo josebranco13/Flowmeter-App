@@ -389,5 +389,33 @@ class PersistenceMixin:
             reverse=True,
         )
 
+    def load_exported_sessions(self) -> list[dict[str, Any]]:
+        SENT_DIR.mkdir(parents=True, exist_ok=True)
+        sessions: list[dict[str, Any]] = []
+        for path in SENT_DIR.glob("*.json"):
+            try:
+                with path.open("r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except (OSError, json.JSONDecodeError):
+                continue
+
+            if not isinstance(data, dict):
+                continue
+
+            data["_file_name"] = path.name
+            sessions.append(data)
+
+        return sorted(
+            sessions,
+            key=lambda item: str(
+                item.get("enviado_em")
+                or item.get("atualizado_em")
+                or item.get("criado_em")
+                or item.get("session_id")
+                or ""
+            ),
+            reverse=True,
+        )
+
     def pending_sessions_count(self) -> int:
         return len(self.load_pending_sessions())

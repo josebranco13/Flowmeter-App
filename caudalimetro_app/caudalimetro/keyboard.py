@@ -101,7 +101,9 @@ class KeyboardMixin:
             if not self.update_option_selection():
                 self.show_menu()
         elif self.screen == "ADMIN_MENU":
-            self.selected_index = (self.selected_index + delta) % 2
+            self.selected_index = (
+                self.selected_index + delta
+            ) % len(self.admin_menu_options())
             if not self.update_option_selection():
                 self.show_admin_menu()
         elif self.screen == "DIAMETER":
@@ -298,7 +300,9 @@ class KeyboardMixin:
         elif self.screen == "SIDE_COMPLETE":
             self.restart_current_side_measurements()
         elif self.screen == "SEND_REVIEW":
-            if self.send_review_expanded_group_key is not None:
+            if self.operator_id != "ADMIN":
+                self.delete_selected_pending_session()
+            elif self.send_review_expanded_group_key is not None:
                 self.delete_selected_pending_session()
             else:
                 self.toggle_selected_pending_group()
@@ -412,7 +416,10 @@ class KeyboardMixin:
             return
 
         if self.screen == "SEND_REVIEW":
-            if self.send_review_expanded_group_key is None:
+            if (
+                self.operator_id == "ADMIN"
+                and self.send_review_expanded_group_key is None
+            ):
                 self.toggle_selected_pending_group_checkbox()
             return
 
@@ -526,7 +533,7 @@ class KeyboardMixin:
             if self.selected_index == 0:
                 self.selected_admin_operator_index = 0
                 self.show_admin_operators()
-            else:
+            elif self.selected_index == 1:
                 self.status_text = ""
                 self.selected_index = 0
                 self.send_review_first_row = 0
@@ -534,6 +541,13 @@ class KeyboardMixin:
                 self.send_review_selected_measurement_ref = None
                 self.checked_send_review_group_keys().clear()
                 self.show_send_review()
+            else:
+                self.status_text = ""
+                self.selected_index = 0
+                self.show_exported_records()
+
+        elif self.screen == "EXPORTED_RECORDS":
+            self.show_admin_menu()
 
         elif self.screen == "MOLD":
             if not self.input_value:
@@ -656,7 +670,10 @@ class KeyboardMixin:
                 self.show_login()
 
         elif self.screen == "SEND_REVIEW":
-            self.confirm_checked_pending_sessions()
+            if self.operator_id == "ADMIN":
+                self.confirm_checked_pending_sessions()
+            elif self.send_review_expanded_group_key is None:
+                self.toggle_selected_pending_group()
             return
 
         elif self.screen == "ADMIN_OPERATORS":
@@ -680,6 +697,9 @@ class KeyboardMixin:
             return
         if self.screen == "ADMIN_MENU":
             self.logout_to_login()
+            return
+        if self.screen == "EXPORTED_RECORDS":
+            self.show_admin_menu()
             return
         elif self.screen == "MOLD":
             self.show_menu()

@@ -22,6 +22,9 @@ from .config import (
 
 
 class ScreensMixin:
+    @staticmethod
+    def admin_menu_options() -> tuple[str, ...]:
+        return ("Operadores", "Confirmar dados", "Registos Exportados")
 
     def show_splash(self) -> None:
         self.screen = "SPLASH"
@@ -417,7 +420,8 @@ class ScreensMixin:
 
     def show_admin_menu(self) -> None:
         self.screen = "ADMIN_MENU"
-        self.selected_index = min(self.selected_index, 1)
+        options = self.admin_menu_options()
+        self.selected_index = min(self.selected_index, len(options) - 1)
         panel = self.build_base(
             "Admin",
             "",
@@ -430,7 +434,7 @@ class ScreensMixin:
         menu_content = tk.Frame(panel, bg=WHITE)
         menu_content.pack(expand=True, anchor="center")
 
-        for i, option in enumerate(("Operadores", "Confirmar dados")):
+        for i, option in enumerate(options):
             label = tk.Label(
                 menu_content,
                 text=option,
@@ -443,6 +447,89 @@ class ScreensMixin:
             self.style_option_label(label, i == self.selected_index)
             label.pack(fill="x", pady=8)
             self.option_labels.append(label)
+
+    def show_exported_records(self) -> None:
+        self.screen = "EXPORTED_RECORDS"
+        sessions = self.load_exported_sessions()
+        rows = self.pending_measurement_rows(sessions)
+        groups = self.pending_measurement_groups(rows)
+        panel = self.build_base(
+            "",
+            "",
+            back_text="Voltar",
+            back_command=self.show_admin_menu,
+            delete_text=None,
+            select_text=None,
+            confirm_text="Voltar",
+            confirm_command=self.show_admin_menu,
+        )
+        panel.configure(bg=WHITE)
+
+        tk.Label(
+            panel,
+            text="Registos Exportados",
+            bg=WHITE,
+            fg=PANEL_FG,
+            font=("Arial", 18, "bold"),
+        ).pack(pady=(18, 6))
+        tk.Label(
+            panel,
+            text=f"Sessões: {len(sessions)} | Grupos: {len(groups)} | Medições: {len(rows)}",
+            bg=WHITE,
+            fg=BLUE if rows else GREEN,
+            font=("Arial", 14, "bold"),
+        ).pack(pady=(0, 12))
+
+        if not groups:
+            tk.Label(
+                panel,
+                text="Não existem registos exportados.",
+                bg=WHITE,
+                fg="#555555",
+                font=("Arial", 13),
+            ).pack(pady=22)
+            return
+
+        table = tk.Frame(panel, bg=WHITE)
+        table.pack(fill="x", padx=24, pady=(0, 0))
+        headers = [
+            ("Data", 16),
+            ("Operador", 14),
+            ("Molde", 12),
+            ("Lado", 14),
+            ("Nº circuitos", 12),
+        ]
+        for col, (header, width) in enumerate(headers):
+            table.grid_columnconfigure(col, weight=width)
+            tk.Label(
+                table,
+                text=header,
+                bg="#374151",
+                fg=WHITE,
+                font=("Arial", 10, "bold"),
+                width=width,
+                pady=4,
+            ).grid(row=0, column=col, padx=1, sticky="ew")
+
+        max_rows = self.send_review_visible_row_count()
+        for row_index, item in enumerate(groups[:max_rows], start=1):
+            values = [
+                item["data"],
+                item["operador"],
+                item["molde"],
+                item["lado"],
+                item["circuito"],
+            ]
+            for col, value in enumerate(values):
+                tk.Label(
+                    table,
+                    text=value,
+                    bg=WHITE,
+                    fg=PANEL_FG,
+                    font=("Arial", 10),
+                    width=headers[col][1],
+                    pady=4,
+                ).grid(row=row_index, column=col, padx=1, pady=1, sticky="ew")
 
     def show_admin_operators(self) -> None:
         self.screen = "ADMIN_OPERATORS"
@@ -2322,21 +2409,39 @@ class ScreensMixin:
             selected_group is not None
             and selected_group.get("_group_key") == expanded_group_key
         )
-        can_select_group = not is_selected_group_expanded
+        show_checkboxes = self.operator_id == "ADMIN"
+        if not show_checkboxes:
+            self.checked_send_review_group_keys().clear()
+        can_select_group = show_checkboxes and not is_selected_group_expanded
         panel = self.build_base(
             "",
             "",
-            delete_text="Apagar" if is_selected_group_expanded else "Expandir",
+            delete_text=(
+                "Apagar"
+                if not show_checkboxes or is_selected_group_expanded
+                else "Expandir"
+            ),
             delete_command=(
-                self.delete_selected_pending_session
-                if is_selected_group_expanded
-                else self.toggle_selected_pending_group
+                (
+                    self.delete_selected_pending_session
+                    if not show_checkboxes or is_selected_group_expanded
+                    else self.toggle_selected_pending_group
+                )
             ),
             select_text="Selecionar" if can_select_group else None,
             select_command=(
                 self.toggle_selected_pending_group_checkbox if can_select_group else None
             ),
-            confirm_text="Confirmar",
+            confirm_text="Exportar PDF" if show_checkboxes else "Expandir",
+            confirm_command=(
+                None
+                if show_checkboxes
+                else (
+                    (lambda: None)
+                    if is_selected_group_expanded
+                    else self.toggle_selected_pending_group
+                )
+            ),
         )
         panel.configure(bg=WHITE)
         session_count = self.pending_review_session_count(rows)
@@ -2349,7 +2454,7 @@ class ScreensMixin:
 
         tk.Label(
             panel,
-            text="Medições pendentes",
+            text="Medições feitas",
             bg=WHITE,
             fg=PANEL_FG,
             font=("Arial", 18, "bold"),
@@ -2416,21 +2521,24 @@ class ScreensMixin:
                     ("Circ.", 5),
                     ("Médio", 10),
                 ]
-            checkbox_column_width = 3
-            table.grid_columnconfigure(0, weight=checkbox_column_width)
-            checkbox_header = tk.Label(
-                table,
-                text="",
-                bg="#374151",
-                fg=WHITE,
-                font=("Arial", 10, "bold"),
-                width=checkbox_column_width,
-                pady=4,
-            )
-            checkbox_header.grid(row=0, column=0, padx=1, sticky="ew")
-            self.bind_send_review_scroll(checkbox_header)
+            first_data_column = 0
+            if show_checkboxes:
+                checkbox_column_width = 3
+                table.grid_columnconfigure(0, weight=checkbox_column_width)
+                checkbox_header = tk.Label(
+                    table,
+                    text="",
+                    bg="#374151",
+                    fg=WHITE,
+                    font=("Arial", 10, "bold"),
+                    width=checkbox_column_width,
+                    pady=4,
+                )
+                checkbox_header.grid(row=0, column=0, padx=1, sticky="ew")
+                self.bind_send_review_scroll(checkbox_header)
+                first_data_column = 1
 
-            for col, (header, width) in enumerate(headers, start=1):
+            for col, (header, width) in enumerate(headers, start=first_data_column):
                 table.grid_columnconfigure(col, weight=width)
                 header_label = tk.Label(
                     table,
@@ -2451,7 +2559,6 @@ class ScreensMixin:
                     if is_expanded
                     else item["_group_index"] == self.selected_index
                 )
-                is_checked = self.is_checked_send_review_row(item)
                 if not is_expanded:
                     values = [
                         item["data"],
@@ -2490,34 +2597,43 @@ class ScreensMixin:
                 elif is_detail:
                     bg = "#e8f4ff" if is_selected else "#f4f8fb"
 
-                checkbox_var = tk.BooleanVar(value=is_checked)
-                self.send_review_checkbox_vars.append(checkbox_var)
-                checkbox = tk.Checkbutton(
-                    table,
-                    variable=checkbox_var,
-                    bg=bg,
-                    activebackground=bg,
-                    selectcolor=WHITE,
-                    relief="flat",
-                    bd=0,
-                    borderwidth=0,
-                    highlightthickness=0,
-                    takefocus=0,
-                    pady=0,
-                )
-                checkbox.bind("<Button-1>", lambda _event: "break")
-                checkbox.bind("<ButtonRelease-1>", lambda _event: "break")
-                self.bind_send_review_scroll(checkbox)
-                checkbox.grid(row=row_index, column=0, padx=1, pady=1, sticky="nsew")
+                if show_checkboxes:
+                    checkbox_var = tk.BooleanVar(
+                        value=self.is_checked_send_review_row(item)
+                    )
+                    self.send_review_checkbox_vars.append(checkbox_var)
+                    checkbox = tk.Checkbutton(
+                        table,
+                        variable=checkbox_var,
+                        bg=bg,
+                        activebackground=bg,
+                        selectcolor=WHITE,
+                        relief="flat",
+                        bd=0,
+                        borderwidth=0,
+                        highlightthickness=0,
+                        takefocus=0,
+                        pady=0,
+                    )
+                    checkbox.bind("<Button-1>", lambda _event: "break")
+                    checkbox.bind("<ButtonRelease-1>", lambda _event: "break")
+                    self.bind_send_review_scroll(checkbox)
+                    checkbox.grid(
+                        row=row_index,
+                        column=0,
+                        padx=1,
+                        pady=1,
+                        sticky="nsew",
+                    )
 
-                for col, value in enumerate(values, start=1):
+                for col, value in enumerate(values, start=first_data_column):
                     cell = tk.Label(
                         table,
                         text=value,
                         bg=bg,
                         fg=fg,
                         font=("Arial", 10, font_weight),
-                        width=headers[col - 1][1],
+                        width=headers[col - first_data_column][1],
                         pady=4,
                     )
                     cell.bind(
@@ -3134,6 +3250,25 @@ class ScreensMixin:
             )
         self.show_send_review()
 
+    def confirm_current_operator_pending_sessions(self) -> None:
+        self.last_send_error = ""
+        count = self.send_pending_measurements_for_current_operator()
+        if count:
+            self.status_text = f"Envio concluido. Medicoes enviadas: {count}."
+            if self.last_send_error:
+                self.status_text += f" {self.last_send_error}"
+        else:
+            self.status_text = (
+                self.last_send_error
+                or "Nao foi possivel enviar medicoes."
+            )
+        self.selected_index = 0
+        self.send_review_first_row = 0
+        self.send_review_expanded_group_key = None
+        self.send_review_selected_measurement_ref = None
+        self.checked_send_review_group_keys().clear()
+        self.show_send_review()
+
     def send_selected_pending_session(self) -> None:
         if getattr(self, "send_review_expanded_group_key", None) is not None:
             self.status_text = "Envio selecionado desativado no detalhe. Use Confirmar."
@@ -3225,7 +3360,7 @@ class ScreensMixin:
                 if not self.should_show_pending_measurement(measurement, session_operator):
                     continue
 
-                side_value = measurement.get("lado") or "-"
+                side_value = measurement.get("lado") or session.get("lado_molde") or "-"
                 min_value = self.measurement_float_value(
                     measurement.get("caudal_min_l_min")
                 )
@@ -3267,7 +3402,8 @@ class ScreensMixin:
     @staticmethod
     def format_session_date(session: dict[str, Any]) -> str:
         value = str(
-            session.get("criado_em")
+            session.get("enviado_em")
+            or session.get("criado_em")
             or session.get("atualizado_em")
             or session.get("session_id")
             or "-"
