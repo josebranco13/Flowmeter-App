@@ -165,14 +165,25 @@ class PersistenceMixin:
     def export_diameter_value(value: Any) -> Any:
         if isinstance(value, bool) or value in (None, ""):
             return value
+        text = str(value).strip().replace('"', "")
+        compact = text.replace(" ", "")
+        valid_labels = set(DIAMETER_LABELS.values())
+        if compact in valid_labels:
+            return compact
         try:
-            numeric_value = float(value)
+            numeric_text = compact
+            if numeric_text.casefold().endswith("mm"):
+                numeric_text = numeric_text[:-2]
+            numeric_value = float(numeric_text.replace(",", "."))
         except (TypeError, ValueError):
             return value
         if not numeric_value.is_integer():
             return value
         diameter = int(numeric_value)
-        return DIAMETER_LABELS.get(diameter, f"{diameter} mm")
+        legacy_labels = {
+            8: "3/8",
+        }
+        return DIAMETER_LABELS.get(diameter) or legacy_labels.get(diameter, value)
 
     def session_data_for_export(self, data: dict[str, Any]) -> dict[str, Any]:
         exported = deepcopy(data)
@@ -723,7 +734,7 @@ class PersistenceMixin:
             "criado_em": manifest.get("criado_em") or exported_at,
             "atualizado_em": exported_at,
             "operadores": operators,
-            "medicoes": merged_measurements,
+            "medicoes": measurements_for_json,
         }
 
         temp_pdf = pdf_path.with_name(f".{pdf_path.name}.{uuid4().hex}.tmp.pdf")
@@ -798,12 +809,68 @@ class PersistenceMixin:
                     "operador": ", ".join(str(item) for item in operators) or "-",
                     "molde": str(manifest.get("molde") or "-"),
                     "ficheiro": pdf_path.name,
+                    "json_ficheiro": manifest_path.name,
                     "tamanho_bytes": pdf_path.stat().st_size,
                     "medicoes": len(measurements) if isinstance(measurements, list) else 0,
                 }
             )
 
         return sorted(records, key=lambda item: item["data"], reverse=True)
+
+    def exported_pdf_record_paths(
+        self,
+        record: dict[str, Any],
+    ) -> tuple[Path, Path] | None:
+        pdf_name = Path(str(record.get("ficheiro") or "")).name
+        if not pdf_name or Path(pdf_name).suffix.lower() != ".pdf":
+            return None
+
+        json_name = Path(str(record.get("json_ficheiro") or "")).name
+        if not json_name:
+            json_name = f"{Path(pdf_name).stem}.json"
+        if Path(json_name).suffix.lower() != ".json":
+            return None
+
+        return PDF_EXPORTS_DIR / pdf_name, PDF_EXPORTS_DIR / json_name
+
+    def exported_pdf_record_attachments(
+        self,
+        record: dict[str, Any],
+    ) -> tuple[list[Path], str]:
+        paths = self.exported_pdf_record_paths(record)
+        if paths is None:
+            return [], "Registo invalido."
+
+        pdf_path, manifest_path = paths
+        missing = [path.name for path in (pdf_path, manifest_path) if not path.exists()]
+        if missing:
+            return [], f"Ficheiro em falta: {', '.join(missing)}"
+
+        return [pdf_path, manifest_path], ""
+
+    def delete_exported_pdf_record(self, record: dict[str, Any]) -> tuple[bool, str]:
+        paths = self.exported_pdf_record_paths(record)
+        if paths is None:
+            return False, "Registo invalido."
+
+        pdf_path, manifest_path = paths
+        removed: list[str] = []
+        errors: list[str] = []
+        for path in (pdf_path, manifest_path):
+            if not path.exists():
+                continue
+            try:
+                path.unlink()
+            except OSError as exc:
+                errors.append(f"{path.name}: {exc}")
+            else:
+                removed.append(path.name)
+
+        if errors:
+            return False, "Nao foi possivel apagar: " + "; ".join(errors)
+        if not removed:
+            return False, "Os ficheiros ja nao existem."
+        return True, "Apagado: " + ", ".join(removed)
 
     @staticmethod
     def format_file_size(size_bytes: Any) -> str:

@@ -145,6 +145,9 @@ class KeyboardMixin:
             self.selected_index = (self.selected_index + delta) % 3
             if not self.update_option_selection():
                 self.show_summary()
+        elif self.screen == "EXPORTED_RECORDS":
+            if self.move_exported_record_selection(delta):
+                self.show_exported_records()
         elif self.screen == "SEND_REVIEW":
             if self.move_send_review_selection(delta):
                 self.show_send_review()
@@ -306,6 +309,8 @@ class KeyboardMixin:
                 self.delete_selected_pending_session()
             else:
                 self.toggle_selected_pending_group()
+        elif self.screen == "EXPORTED_RECORDS":
+            self.delete_selected_exported_record()
         elif self.screen == "ADMIN_OPERATORS":
             self.remove_selected_admin_operator()
         elif self.screen == "ADMIN_ADD_OPERATOR":
@@ -344,6 +349,8 @@ class KeyboardMixin:
             self.refresh_circuit_input_display()
         elif self.screen == "SIDE_COMPLETE":
             self.restart_current_side_measurements()
+        elif self.screen == "EXPORTED_RECORDS":
+            self.delete_selected_exported_record()
         elif self.screen == "ADMIN_OPERATORS":
             self.remove_selected_admin_operator()
         elif self.screen == "ADMIN_ADD_OPERATOR":
@@ -421,6 +428,10 @@ class KeyboardMixin:
                 and self.send_review_expanded_group_key is None
             ):
                 self.toggle_selected_pending_group_checkbox()
+            return
+
+        if self.screen == "EXPORTED_RECORDS":
+            self.email_selected_exported_record()
             return
 
         if self.screen == "ADMIN_OPERATORS":
@@ -547,7 +558,7 @@ class KeyboardMixin:
                 self.show_exported_records()
 
         elif self.screen == "EXPORTED_RECORDS":
-            self.show_admin_menu()
+            self.email_all_exported_records()
 
         elif self.screen == "MOLD":
             if not self.input_value:

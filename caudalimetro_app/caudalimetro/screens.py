@@ -19,6 +19,7 @@ from .config import (
     RED,
     WHITE,
 )
+from .email_sender import open_email_with_attachments
 
 
 class ScreensMixin:
@@ -457,10 +458,12 @@ class ScreensMixin:
             "",
             back_text="Voltar",
             back_command=self.show_admin_menu,
-            delete_text=None,
-            select_text=None,
-            confirm_text="Voltar",
-            confirm_command=self.show_admin_menu,
+            delete_text="Apagar",
+            delete_command=self.delete_selected_exported_record,
+            select_text="Enviar selecionado",
+            select_command=self.email_selected_exported_record,
+            confirm_text="Enviar todos",
+            confirm_command=self.email_all_exported_records,
         )
         panel.configure(bg=WHITE)
 
@@ -483,6 +486,8 @@ class ScreensMixin:
         ).pack(pady=(0, 12))
 
         if not records:
+            self.selected_exported_record_index = 0
+            self.exported_records_first_row = 0
             tk.Label(
                 panel,
                 text="Não existem ficheiros PDF exportados.",
@@ -492,8 +497,27 @@ class ScreensMixin:
             ).pack(pady=22)
             return
 
-        table = tk.Frame(panel, bg=WHITE)
-        table.pack(fill="x", padx=24, pady=(0, 0))
+        self.selected_exported_record_index = max(
+            0,
+            min(
+                getattr(self, "selected_exported_record_index", 0),
+                len(records) - 1,
+            ),
+        )
+        max_rows = self.exported_records_visible_row_count()
+        first_visible_row = self.exported_records_first_row_for_selection(
+            records,
+            max_rows,
+        )
+        self.exported_records_first_row = first_visible_row
+        visible_records = records[first_visible_row : first_visible_row + max_rows]
+
+        table_area = tk.Frame(panel, bg=WHITE)
+        table_area.pack(fill="x", padx=24, pady=(0, 0))
+        table = tk.Frame(table_area, bg=WHITE)
+        table.pack(side="left", fill="x", expand=True)
+        self.bind_exported_records_scroll(table_area)
+        self.bind_exported_records_scroll(table)
         headers = [
             ("Data", 15),
             ("Operador", 16),
@@ -503,7 +527,7 @@ class ScreensMixin:
         ]
         for col, (header, width) in enumerate(headers):
             table.grid_columnconfigure(col, weight=width)
-            tk.Label(
+            header_label = tk.Label(
                 table,
                 text=header,
                 bg="#374151",
@@ -511,10 +535,16 @@ class ScreensMixin:
                 font=("Arial", 10, "bold"),
                 width=width,
                 pady=4,
-            ).grid(row=0, column=col, padx=1, sticky="ew")
+            )
+            header_label.grid(row=0, column=col, padx=1, sticky="ew")
+            self.bind_exported_records_scroll(header_label)
 
-        max_rows = self.send_review_visible_row_count()
-        for row_index, item in enumerate(records[:max_rows], start=1):
+        for row_index, item in enumerate(visible_records, start=1):
+            item_index = first_visible_row + row_index - 1
+            is_selected = item_index == self.selected_exported_record_index
+            bg = BLUE if is_selected else WHITE
+            fg = WHITE if is_selected else PANEL_FG
+            font_weight = "bold" if is_selected else "normal"
             values = [
                 item["data"],
                 self.short_table_text(item["operador"], 16),
@@ -523,15 +553,233 @@ class ScreensMixin:
                 self.format_file_size(item["tamanho_bytes"]),
             ]
             for col, value in enumerate(values):
-                tk.Label(
+                cell = tk.Label(
                     table,
                     text=value,
-                    bg=WHITE,
-                    fg=PANEL_FG,
-                    font=("Arial", 10),
+                    bg=bg,
+                    fg=fg,
+                    font=("Arial", 10, font_weight),
                     width=headers[col][1],
                     pady=4,
-                ).grid(row=row_index, column=col, padx=1, pady=1, sticky="ew")
+                )
+                cell.bind(
+                    "<ButtonRelease-1>",
+                    lambda _event, index=item_index: self.select_exported_record(index),
+                )
+                self.bind_exported_records_scroll(cell)
+                cell.grid(row=row_index, column=col, padx=1, pady=1, sticky="ew")
+
+        if len(records) > max_rows:
+            scrollbar = tk.Frame(table_area, bg="#d7d7d7", width=22)
+            scrollbar.pack(side="right", fill="y", padx=(8, 0))
+            scrollbar.pack_propagate(False)
+            self.bind_exported_records_scroll(scrollbar)
+
+            visible_fraction = max(0.12, min(1.0, len(visible_records) / len(records)))
+            max_start = max(len(records) - len(visible_records), 1)
+            thumb_top = (first_visible_row / max_start) * (1.0 - visible_fraction)
+            tk.Frame(scrollbar, bg="#555555").place(
+                relx=0.5,
+                rely=thumb_top,
+                anchor="n",
+                relwidth=0.5,
+                relheight=visible_fraction,
+            )
+
+    def exported_records_visible_row_count(self) -> int:
+        height = self.winfo_height()
+        if height <= 1:
+            height = APP_HEIGHT
+
+        if height >= 900:
+            return 16
+        if height >= 700:
+            return 11
+        return 8
+
+    @staticmethod
+    def clamp_exported_records_first_row(
+        records: list[dict[str, Any]],
+        first_row: int,
+        max_rows: int,
+    ) -> int:
+        max_start = max(len(records) - max_rows, 0)
+        return max(0, min(first_row, max_start))
+
+    def exported_records_first_row_for_selection(
+        self,
+        records: list[dict[str, Any]],
+        max_rows: int,
+    ) -> int:
+        if not records:
+            return 0
+
+        selected_index = max(
+            0,
+            min(
+                getattr(self, "selected_exported_record_index", 0),
+                len(records) - 1,
+            ),
+        )
+        first_row = self.clamp_exported_records_first_row(
+            records,
+            int(getattr(self, "exported_records_first_row", 0)),
+            max_rows,
+        )
+        visible_last_row = first_row + max_rows - 1
+        if selected_index < first_row:
+            return self.clamp_exported_records_first_row(records, selected_index, max_rows)
+        if selected_index > visible_last_row:
+            return self.clamp_exported_records_first_row(
+                records,
+                selected_index - max_rows + 1,
+                max_rows,
+            )
+        return first_row
+
+    def bind_exported_records_scroll(self, widget: tk.Widget) -> None:
+        widget.bind("<MouseWheel>", self.on_exported_records_mousewheel, add="+")
+        widget.bind("<Button-4>", self.on_exported_records_mousewheel, add="+")
+        widget.bind("<Button-5>", self.on_exported_records_mousewheel, add="+")
+
+    def on_exported_records_mousewheel(self, event: tk.Event) -> str:
+        if getattr(event, "num", None) == 4:
+            delta = -1
+        elif getattr(event, "num", None) == 5:
+            delta = 1
+        else:
+            delta = -1 if getattr(event, "delta", 0) > 0 else 1
+
+        if self.move_exported_record_selection(delta):
+            self.show_exported_records()
+        return "break"
+
+    def move_exported_record_selection(self, delta: int) -> bool:
+        records = self.load_exported_pdf_records()
+        if not records:
+            self.selected_exported_record_index = 0
+            self.exported_records_first_row = 0
+            return False
+
+        self.selected_exported_record_index = (
+            self.selected_exported_record_index + delta
+        ) % len(records)
+        max_rows = self.exported_records_visible_row_count()
+        self.exported_records_first_row = self.exported_records_first_row_for_selection(
+            records,
+            max_rows,
+        )
+        return True
+
+    def select_exported_record(self, index: int) -> None:
+        records = self.load_exported_pdf_records()
+        if not records:
+            self.selected_exported_record_index = 0
+            self.exported_records_first_row = 0
+            self.show_exported_records()
+            return
+
+        self.selected_exported_record_index = max(0, min(index, len(records) - 1))
+        max_rows = self.exported_records_visible_row_count()
+        self.exported_records_first_row = self.exported_records_first_row_for_selection(
+            records,
+            max_rows,
+        )
+        self.show_exported_records()
+
+    def selected_exported_record(self) -> dict[str, Any] | None:
+        records = self.load_exported_pdf_records()
+        if not records:
+            self.selected_exported_record_index = 0
+            self.exported_records_first_row = 0
+            return None
+
+        self.selected_exported_record_index = max(
+            0,
+            min(self.selected_exported_record_index, len(records) - 1),
+        )
+        return records[self.selected_exported_record_index]
+
+    def delete_selected_exported_record(self) -> None:
+        record = self.selected_exported_record()
+        if record is None:
+            self.status_text = "Nao existem ficheiros para apagar."
+            self.show_exported_records()
+            return
+
+        success, message = self.delete_exported_pdf_record(record)
+        self.status_text = message
+        if success:
+            remaining_records = self.load_exported_pdf_records()
+            if remaining_records:
+                self.selected_exported_record_index = min(
+                    self.selected_exported_record_index,
+                    len(remaining_records) - 1,
+                )
+            else:
+                self.selected_exported_record_index = 0
+                self.exported_records_first_row = 0
+        self.show_exported_records()
+
+    def email_selected_exported_record(self) -> None:
+        record = self.selected_exported_record()
+        if record is None:
+            self.status_text = "Nao existem ficheiros para enviar."
+            self.show_exported_records()
+            return
+
+        attachments, error = self.exported_pdf_record_attachments(record)
+        if error:
+            self.status_text = error
+            self.show_exported_records()
+            return
+
+        mold = str(record.get("molde") or "-")
+        _success, message = open_email_with_attachments(
+            subject=f"Registo de caudais - {mold}",
+            body=(
+                "Segue em anexo o PDF de registo de caudais e o respetivo JSON.\n\n"
+                f"Molde: {mold}\n"
+                f"Ficheiro: {record.get('ficheiro') or '-'}\n"
+            ),
+            attachment_paths=attachments,
+        )
+        self.status_text = message
+        self.show_exported_records()
+
+    def email_all_exported_records(self) -> None:
+        records = self.load_exported_pdf_records()
+        if not records:
+            self.status_text = "Nao existem ficheiros para enviar."
+            self.show_exported_records()
+            return
+
+        attachments: list[Any] = []
+        seen_paths: set[str] = set()
+        for record in records:
+            record_attachments, error = self.exported_pdf_record_attachments(record)
+            if error:
+                self.status_text = error
+                self.show_exported_records()
+                return
+            for path in record_attachments:
+                path_key = str(path.resolve())
+                if path_key not in seen_paths:
+                    seen_paths.add(path_key)
+                    attachments.append(path)
+
+        _success, message = open_email_with_attachments(
+            subject=f"Registos de caudais exportados ({len(records)} ficheiros)",
+            body=(
+                "Seguem em anexo todos os PDFs de registo de caudais listados "
+                "na aplicacao e os respetivos JSON.\n\n"
+                f"Total de PDFs: {len(records)}\n"
+                f"Total de anexos: {len(attachments)}\n"
+            ),
+            attachment_paths=attachments,
+        )
+        self.status_text = message
+        self.show_exported_records()
 
     def show_admin_operators(self) -> None:
         self.screen = "ADMIN_OPERATORS"

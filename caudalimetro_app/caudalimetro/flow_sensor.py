@@ -29,7 +29,7 @@ class YFS201Sensor:
 
     def __init__(
         self,
-        gpio_pin: int = 17,
+        gpio_pin: int = 21,
         pulses_per_litre: float = 450.0,
         zero_flow_timeout: float = 0.5,
         smoothing_factor: float = 0.30,

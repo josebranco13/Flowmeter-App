@@ -8,6 +8,7 @@ from .config import (
     APP_WIDTH,
     DATA_DIR,
     DIAMETER_OPTIONS,
+    MAIL_DRAFTS_DIR,
     MENU_OPTIONS,
     PDF_EXPORTS_DIR,
     SENT_DIR,
@@ -47,6 +48,7 @@ class CaudalimetroApp(
         SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
         SENT_DIR.mkdir(parents=True, exist_ok=True)
         PDF_EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
+        MAIL_DRAFTS_DIR.mkdir(parents=True, exist_ok=True)
         initialize_database()
 
         self.screen = ""
@@ -54,6 +56,8 @@ class CaudalimetroApp(
         self.pin = ""
         self.active_field = 0
         self.selected_index = 0
+        self.selected_exported_record_index = 0
+        self.exported_records_first_row = 0
         self.send_review_first_row = 0
         self.send_review_expanded_group_key: tuple[str, str, str, str] | None = None
         self.send_review_selected_measurement_ref: tuple[str, int] | None = None
