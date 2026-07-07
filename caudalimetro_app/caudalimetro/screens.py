@@ -19,13 +19,17 @@ from .config import (
     RED,
     WHITE,
 )
-from .email_sender import open_email_with_attachments
+from .email_sender import (
+    load_email_config,
+    send_all_exports_email_async,
+    send_selected_export_email_async,
+)
 
 
 class ScreensMixin:
     @staticmethod
     def admin_menu_options() -> tuple[str, ...]:
-        return ("Operadores", "Confirmar dados", "Registos Exportados")
+        return ("Operadores", "Exportar dados", "Registos Exportados")
 
     def show_splash(self) -> None:
         self.screen = "SPLASH"
@@ -721,10 +725,24 @@ class ScreensMixin:
                 self.exported_records_first_row = 0
         self.show_exported_records()
 
+    def _finish_email_send(self, success: bool, message: str) -> None:
+        def update_status() -> None:
+            self.status_text = message if success else f"Erro ao enviar email: {message}"
+            if self.screen == "EXPORTED_RECORDS":
+                self.show_exported_records()
+
+        self.after(0, update_status)
+
     def email_selected_exported_record(self) -> None:
         record = self.selected_exported_record()
         if record is None:
             self.status_text = "Nao existem ficheiros para enviar."
+            self.show_exported_records()
+            return
+
+        paths = self.exported_pdf_record_paths(record)
+        if paths is None:
+            self.status_text = "Registo invalido."
             self.show_exported_records()
             return
 
@@ -734,18 +752,25 @@ class ScreensMixin:
             self.show_exported_records()
             return
 
+        pdf_path, json_path = paths
         mold = str(record.get("molde") or "-")
-        _success, message = open_email_with_attachments(
-            subject=f"Registo de caudais - {mold}",
-            body=(
-                "Segue em anexo o PDF de registo de caudais e o respetivo JSON.\n\n"
-                f"Molde: {mold}\n"
-                f"Ficheiro: {record.get('ficheiro') or '-'}\n"
-            ),
-            attachment_paths=attachments,
-        )
-        self.status_text = message
+
+        try:
+            config = load_email_config()
+        except Exception as exc:
+            self.status_text = f"Configuração de email inválida: {exc}"
+            self.show_exported_records()
+            return
+
+        self.status_text = "A enviar email..."
         self.show_exported_records()
+        send_selected_export_email_async(
+            config=config,
+            pdf_path=pdf_path,
+            json_path=json_path,
+            molde=mold,
+            on_result=self._finish_email_send,
+        )
 
     def email_all_exported_records(self) -> None:
         records = self.load_exported_pdf_records()
@@ -754,32 +779,26 @@ class ScreensMixin:
             self.show_exported_records()
             return
 
-        attachments: list[Any] = []
-        seen_paths: set[str] = set()
         for record in records:
-            record_attachments, error = self.exported_pdf_record_attachments(record)
+            _attachments, error = self.exported_pdf_record_attachments(record)
             if error:
                 self.status_text = error
                 self.show_exported_records()
                 return
-            for path in record_attachments:
-                path_key = str(path.resolve())
-                if path_key not in seen_paths:
-                    seen_paths.add(path_key)
-                    attachments.append(path)
 
-        _success, message = open_email_with_attachments(
-            subject=f"Registos de caudais exportados ({len(records)} ficheiros)",
-            body=(
-                "Seguem em anexo todos os PDFs de registo de caudais listados "
-                "na aplicacao e os respetivos JSON.\n\n"
-                f"Total de PDFs: {len(records)}\n"
-                f"Total de anexos: {len(attachments)}\n"
-            ),
-            attachment_paths=attachments,
-        )
-        self.status_text = message
+        try:
+            config = load_email_config()
+        except Exception as exc:
+            self.status_text = f"Configuração de email inválida: {exc}"
+            self.show_exported_records()
+            return
+
+        self.status_text = "A enviar todos os ficheiros exportados..."
         self.show_exported_records()
+        send_all_exports_email_async(
+            config=config,
+            on_result=self._finish_email_send,
+        )
 
     def show_admin_operators(self) -> None:
         self.screen = "ADMIN_OPERATORS"

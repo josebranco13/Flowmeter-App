@@ -25,6 +25,7 @@ from .config import (
     SESSIONS_DIR,
 )
 from .models import MeasurementRecord, MeasurementSession
+from .email_sender import send_automatic_exports_if_configured
 from .pdf_exporter import generate_flow_report
 
 
@@ -761,6 +762,15 @@ class PersistenceMixin:
 
             os.replace(temp_pdf, pdf_path)
             os.replace(temp_manifest, manifest_path)
+
+            # Envio automático opcional.
+            # Só inicia se estiver ativo em data/email_config.json e se existirem
+            # pares PDF/JSON exportados na pasta data/pdf_exportados.
+            send_automatic_exports_if_configured(
+                pdf_path=pdf_path,
+                json_path=manifest_path,
+                molde=mold,
+            )
         except (OSError, ValueError) as exc:
             for temp_path in (temp_pdf, temp_manifest):
                 try:

@@ -1,0 +1,49 @@
+{
+  "enabled": true,
+  "mode": "manual",
+
+  "smtp": {
+    "host": "smtp.gmail.com",
+    "port": 587,
+    "security": "starttls",
+    "timeout_seconds": 20
+  },
+
+  "account": {
+    "sender_name": "Sistema de Medição de Caudais",
+    "sender_email": "caudalimetro.teste@gmail.com",
+    "username": "caudalimetro.teste@gmail.com",
+    "password_env": "CAUDALIMETRO_EMAIL_PASSWORD"
+  },
+
+  "recipients": {
+    "to": [
+      "caudalimetro.teste@gmail.com"
+    ],
+    "cc": [],
+    "bcc": []
+  },
+
+  "exports": {
+    "directory": "data/pdf_exportados",
+    "include_json": true,
+    "require_pdf_and_json": true
+  },
+
+  "messages": {
+    "single": {
+      "subject": "Registo de caudais - Molde {molde}",
+      "body": "Bom dia,\n\nSegue em anexo o relatório PDF e o respetivo ficheiro JSON do molde {molde}.\n\nFicheiro PDF: {pdf_nome}\nFicheiro JSON: {json_nome}\n\nCumprimentos,\nSistema de Medição de Caudais"
+    },
+    "all": {
+      "subject": "Registos de caudais exportados",
+      "body": "Bom dia,\n\nSeguem em anexo todos os relatórios PDF exportados e os respetivos ficheiros JSON.\n\nTotal de pares PDF/JSON: {total_pares}\nTotal de ficheiros anexados: {total_ficheiros}\n\nCumprimentos,\nSistema de Medição de Caudais"
+    }
+  },
+
+  "automatic_send": {
+    "enabled": false,
+    "scope": "last_export",
+    "require_pdf_and_json": true
+  }
+}
