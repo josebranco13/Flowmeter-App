@@ -112,6 +112,8 @@ class CaudalimetroApp(
         self.measure_labels: dict[str, tk.Label] = {}
         self.status_text = ""
 
+        self.after(3000, self.auto_export_completed_sessions_on_boot)
+
         self.bind_all("<KeyPress>", self.on_key)
         self.bind_all("<ButtonRelease-1>", self.restore_keyboard_focus, add="+")
         self.protocol("WM_DELETE_WINDOW", self.destroy)

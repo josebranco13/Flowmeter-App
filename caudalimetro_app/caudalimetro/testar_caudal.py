@@ -9,7 +9,7 @@ except (ImportError, RuntimeError):
     GPIO = None
 
 # --- Configuration ---
-FLOW_SENSOR_PIN = 17
+FLOW_SENSOR_PIN = 21
 # Calibration factor for YF-S201 (Pulse frequency (Hz) / 7.5 = Q (L/min))
 CALIBRATION_FACTOR = 7.5 
 

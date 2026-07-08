@@ -33,8 +33,8 @@ DIAMETER_LABELS = {
     12: "1/2",
     20: "3/4",
 }
-MENU_OPTIONS = ["Medir caudal", "Confirmar dados"]
+MENU_OPTIONS = ["Medir caudal", "Medições feitas"]
 
-FLOW_SENSOR_GPIO_PIN = 17
+FLOW_SENSOR_GPIO_PIN = 21
 FLOW_SENSOR_CALIBRATION_FACTOR = 7.5
 FLOW_SENSOR_UPDATE_MS = 1000

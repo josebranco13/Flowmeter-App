@@ -716,6 +716,157 @@ class PersistenceMixin:
 
         return sum(len(indices) for indices in refs_by_file.values())
 
+    def exported_sides_for_mold(self, mold: str) -> set[str]:
+        PDF_EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
+
+        target_mold = str(mold or "").strip().casefold()
+        sides: set[str] = set()
+
+        if not target_mold:
+            return sides
+
+        for manifest_path in PDF_EXPORTS_DIR.glob("Registo_Caudais_*.json"):
+            try:
+                with manifest_path.open("r", encoding="utf-8") as file:
+                    manifest = json.load(file)
+            except (OSError, json.JSONDecodeError):
+                continue
+
+            if not isinstance(manifest, dict):
+                continue
+
+            manifest_mold = str(manifest.get("molde") or "").strip().casefold()
+            if manifest_mold != target_mold:
+                continue
+
+            measurements = manifest.get("medicoes")
+            if not isinstance(measurements, list):
+                continue
+
+            for measurement in measurements:
+                if not isinstance(measurement, dict):
+                    continue
+
+                side = str(measurement.get("lado") or "").strip()
+                if side:
+                    sides.add(side.casefold())
+
+        return sides
+
+    def auto_export_completed_sessions_on_boot(self) -> None:
+        SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+
+        grouped_by_mold: dict[str, dict[str, Any]] = {}
+
+        for path in SESSIONS_DIR.glob("*.json"):
+            loaded = self.load_pending_session_file(path.name)
+            if loaded is None:
+                continue
+
+            _, session = loaded
+
+            estado = str(session.get("estado") or "").strip().casefold()
+            if estado not in {"concluida", "concluido", "concluído"}:
+                continue
+
+            measurements = session.get("medicoes")
+            if not isinstance(measurements, list) or not measurements:
+                continue
+
+            mold = str(session.get("molde") or "").strip()
+            if not mold:
+                continue
+
+            mold_key = mold.casefold()
+
+            group = grouped_by_mold.setdefault(
+                mold_key,
+                {
+                    "molde": mold,
+                    "rows": [],
+                    "pending_sides": set(),
+                },
+            )
+
+            for measurement_index, measurement in enumerate(measurements):
+                if not isinstance(measurement, dict):
+                    continue
+
+                side = str(
+                    measurement.get("lado")
+                    or session.get("lado_molde")
+                    or ""
+                ).strip()
+
+                if not side:
+                    continue
+
+                side_key = side.casefold()
+
+                group["pending_sides"].add(side_key)
+                group["rows"].append(
+                    {
+                        "_file_name": path.name,
+                        "_measurement_index": measurement_index,
+                        "_side_key": side_key,
+                    }
+                )
+
+        exported_molds = 0
+        exported_measurements = 0
+        errors: list[str] = []
+
+        for group in grouped_by_mold.values():
+            mold = str(group["molde"])
+            rows = list(group["rows"])
+            pending_sides = set(group["pending_sides"])
+            existing_sides = self.exported_sides_for_mold(mold)
+
+            if not rows or not pending_sides:
+                continue
+
+            has_multiple_pending_sides = len(pending_sides) >= 2
+            adds_new_side_to_existing_pdf = bool(existing_sides) and bool(
+                pending_sides - existing_sides
+            )
+
+            if not has_multiple_pending_sides and not adds_new_side_to_existing_pdf:
+                continue
+
+            if existing_sides:
+                rows_to_export = [
+                    row
+                    for row in rows
+                    if row.get("_side_key") not in existing_sides
+                ]
+            else:
+                rows_to_export = rows
+
+            if not rows_to_export:
+                continue
+
+            success, message, _record = self.export_pending_measurement_rows_to_pdf(
+                rows_to_export
+            )
+
+            if success:
+                exported_molds += 1
+                exported_measurements += len(rows_to_export)
+            else:
+                errors.append(message)
+
+        if exported_molds:
+            self.status_text = (
+                f"Exportação automática concluída: "
+                f"{exported_molds} molde(s), "
+                f"{exported_measurements} medição(ões)."
+            )
+        elif errors:
+            self.status_text = "Erro na exportação automática: " + errors[0]
+
+        if getattr(self, "screen", "") == "LOGIN":
+            self.show_login()
+
     def export_pending_measurement_rows_to_pdf(
         self, rows: list[dict[str, Any]]
     ) -> tuple[bool, str, dict[str, Any] | None]:
