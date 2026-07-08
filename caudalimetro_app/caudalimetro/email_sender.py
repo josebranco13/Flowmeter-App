@@ -14,6 +14,7 @@ from .config import DATA_DIR, PDF_EXPORTS_DIR
 
 EMAIL_CONFIG_PATH = DATA_DIR / "email_config.json"
 EmailResultCallback = Callable[[bool, str], None]
+EMAIL_SENT_FIELD = "email_enviado_em"
 
 
 def load_email_config(config_path: str | Path = EMAIL_CONFIG_PATH) -> dict[str, Any]:
@@ -65,6 +66,41 @@ def _export_directory(config: dict[str, Any] | None = None) -> Path:
     return DATA_DIR.parent / path
 
 
+def export_manifest_was_emailed(json_path: Path) -> bool:
+    try:
+        with Path(json_path).open("r", encoding="utf-8") as file:
+            data = json.load(file)
+    except (OSError, json.JSONDecodeError):
+        return False
+
+    return isinstance(data, dict) and bool(data.get(EMAIL_SENT_FIELD))
+
+
+def mark_export_manifest_emailed(json_path: Path) -> bool:
+    path = Path(json_path)
+    try:
+        with path.open("r", encoding="utf-8") as file:
+            data = json.load(file)
+    except (OSError, json.JSONDecodeError):
+        return False
+
+    if not isinstance(data, dict):
+        return False
+
+    from datetime import datetime
+
+    data[EMAIL_SENT_FIELD] = datetime.now().isoformat(timespec="seconds")
+    data["email_estado"] = "enviado"
+
+    try:
+        with path.open("w", encoding="utf-8") as file:
+            json.dump(data, file, ensure_ascii=False, indent=2)
+    except OSError:
+        return False
+
+    return True
+
+
 def exported_pdf_json_pairs(
     export_dir: Path = PDF_EXPORTS_DIR,
 ) -> list[tuple[Path, Path]]:
@@ -77,6 +113,8 @@ def exported_pdf_json_pairs(
         json_path = pdf_path.with_suffix(".json")
 
         if json_path.exists() and json_path.is_file():
+            if export_manifest_was_emailed(json_path):
+                continue
             pairs.append((pdf_path, json_path))
 
     return pairs
@@ -258,16 +296,24 @@ def send_selected_export_email(
         context,
     )
 
-    return send_email_with_attachments(
+    success, message = send_email_with_attachments(
         config=config,
         subject=subject,
         body=body,
         attachment_paths=[pdf_path, json_path],
     )
+    if success:
+        mark_export_manifest_emailed(json_path)
+    return success, message
 
 
-def send_all_exports_email(config: dict[str, Any]) -> tuple[bool, str]:
-    pairs = exported_pdf_json_pairs(_export_directory(config))
+def send_all_exports_email(
+    config: dict[str, Any],
+    pairs: Iterable[tuple[Path, Path]] | None = None,
+) -> tuple[bool, str]:
+    pairs = list(pairs) if pairs is not None else exported_pdf_json_pairs(
+        _export_directory(config)
+    )
 
     if not pairs:
         return False, "Não existem pares PDF + JSON para enviar."
@@ -299,12 +345,16 @@ def send_all_exports_email(config: dict[str, Any]) -> tuple[bool, str]:
         context,
     )
 
-    return send_email_with_attachments(
+    success, message = send_email_with_attachments(
         config=config,
         subject=subject,
         body=body,
         attachment_paths=attachments,
     )
+    if success:
+        for _pdf_path, json_path in pairs:
+            mark_export_manifest_emailed(json_path)
+    return success, message
 
 
 def should_send_automatically(config: dict[str, Any]) -> bool:
@@ -366,9 +416,10 @@ def send_selected_export_email_async(
 def send_all_exports_email_async(
     *,
     config: dict[str, Any],
+    pairs: Iterable[tuple[Path, Path]] | None = None,
     on_result: EmailResultCallback | None = None,
 ) -> threading.Thread:
-    return _send_email_async(lambda: send_all_exports_email(config), on_result)
+    return _send_email_async(lambda: send_all_exports_email(config, pairs), on_result)
 
 
 def send_automatic_exports_if_configured(

@@ -25,8 +25,12 @@ from .config import (
     SESSIONS_DIR,
 )
 from .models import MeasurementRecord, MeasurementSession
-from .email_sender import send_automatic_exports_if_configured
+from .email_sender import EMAIL_SENT_FIELD, send_automatic_exports_if_configured
 from .pdf_exporter import generate_flow_report
+
+
+COMPLETED_SESSION_STATE = "concluida"
+LEGACY_COMPLETED_SESSION_STATES = {"confirmada_operador"}
 
 
 class PersistenceMixin:
@@ -212,11 +216,67 @@ class PersistenceMixin:
     def save_session(self) -> None:
         if self.session is None:
             return
-        SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
         self.session.atualizado_em = datetime.now().isoformat(timespec="seconds")
         path = SESSIONS_DIR / f"{self.session.session_id}.json"
+
+        if not self.is_completed_session_state(self.session.estado):
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
+            return
+
+        SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
         with path.open("w", encoding="utf-8") as f:
             json.dump(asdict(self.session), f, ensure_ascii=False, indent=2)
+
+    @staticmethod
+    def is_completed_session_state(estado: Any) -> bool:
+        return str(estado or "").strip().casefold() == COMPLETED_SESSION_STATE
+
+    @staticmethod
+    def is_legacy_completed_session_state(estado: Any) -> bool:
+        return str(estado or "").strip().casefold() in LEGACY_COMPLETED_SESSION_STATES
+
+    @staticmethod
+    def remove_session_file(path: Path) -> None:
+        try:
+            path.unlink()
+        except OSError:
+            pass
+
+    def normalize_sessions_dir(self) -> None:
+        SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+        for path in SESSIONS_DIR.glob("*.json"):
+            try:
+                with path.open("r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except (OSError, json.JSONDecodeError):
+                self.remove_session_file(path)
+                continue
+
+            if not isinstance(data, dict):
+                self.remove_session_file(path)
+                continue
+
+            estado = data.get("estado")
+            if self.is_completed_session_state(estado) and not data.get("enviado_em"):
+                continue
+
+            if (
+                self.is_legacy_completed_session_state(estado)
+                and not data.get("enviado_em")
+            ):
+                data["estado"] = COMPLETED_SESSION_STATE
+                data["atualizado_em"] = datetime.now().isoformat(timespec="seconds")
+                try:
+                    with path.open("w", encoding="utf-8") as f:
+                        json.dump(data, f, ensure_ascii=False, indent=2)
+                except OSError:
+                    pass
+                continue
+
+            self.remove_session_file(path)
 
     def append_measurement_csv(self, record: MeasurementRecord) -> None:
         CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -246,7 +306,11 @@ class PersistenceMixin:
                 data = json.load(f)
         except (OSError, json.JSONDecodeError):
             return None
-        if not isinstance(data, dict) or data.get("enviado_em"):
+        if (
+            not isinstance(data, dict)
+            or data.get("enviado_em")
+            or not self.is_completed_session_state(data.get("estado"))
+        ):
             return None
         return path, data
 
@@ -392,6 +456,9 @@ class PersistenceMixin:
                 continue
 
             if data.get("enviado_em"):
+                continue
+
+            if not self.is_completed_session_state(data.get("estado")):
                 continue
 
             data["_file_name"] = path.name
@@ -799,6 +866,8 @@ class PersistenceMixin:
             except (OSError, json.JSONDecodeError):
                 continue
             if not isinstance(manifest, dict):
+                continue
+            if manifest.get(EMAIL_SENT_FIELD):
                 continue
 
             pdf_name = str(manifest.get("ficheiro") or "")

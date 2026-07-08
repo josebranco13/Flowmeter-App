@@ -779,12 +779,19 @@ class ScreensMixin:
             self.show_exported_records()
             return
 
+        pairs = []
         for record in records:
             _attachments, error = self.exported_pdf_record_attachments(record)
             if error:
                 self.status_text = error
                 self.show_exported_records()
                 return
+            paths = self.exported_pdf_record_paths(record)
+            if paths is None:
+                self.status_text = "Registo invalido."
+                self.show_exported_records()
+                return
+            pairs.append(paths)
 
         try:
             config = load_email_config()
@@ -797,6 +804,7 @@ class ScreensMixin:
         self.show_exported_records()
         send_all_exports_email_async(
             config=config,
+            pairs=pairs,
             on_result=self._finish_email_send,
         )
 

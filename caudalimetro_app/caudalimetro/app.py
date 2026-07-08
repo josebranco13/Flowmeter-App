@@ -50,6 +50,7 @@ class CaudalimetroApp(
         PDF_EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
         MAIL_DRAFTS_DIR.mkdir(parents=True, exist_ok=True)
         initialize_database()
+        self.normalize_sessions_dir()
 
         self.screen = ""
         self.operator_id = ""
