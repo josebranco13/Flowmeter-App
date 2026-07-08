@@ -1,72 +1,159 @@
-import RPi.GPIO as GPIO
+from __future__ import annotations
+
+from collections.abc import Callable, Sequence
+from threading import Event, Thread
 import time
 
-# --- Configuration ---
-# GPIO Pins mapped left to right as requested: 14, 15, 18, 27, 22, 24, 25
+try:
+    import RPi.GPIO as GPIO
+except (ImportError, RuntimeError) as exc:
+    GPIO = None
+    GPIO_IMPORT_ERROR = exc
+else:
+    GPIO_IMPORT_ERROR = None
+
+
 ROW_PINS = [25, 24, 22, 27]
 COL_PINS = [18, 15, 14]
 
-# Layout matching image_edf681.png
 KEYPAD = [
-    ['1', '2', '3'],
-    ['4', '5', '6'],
-    ['7', '8', '9'],
-    ['*', '0', '#']
+    ["1", "2", "3"],
+    ["4", "5", "6"],
+    ["7", "8", "9"],
+    ["*", "0", "#"],
 ]
 
-def setup():
-    """Initializes the GPIO pins for the keypad."""
-    # Use BCM GPIO numbering
+KeyCallback = Callable[[str], None]
+
+
+def _ensure_gpio_available() -> None:
+    if GPIO is None:
+        raise RuntimeError(
+            "A biblioteca RPi.GPIO nao esta disponivel. "
+            "Instale-a no Raspberry Pi para usar o numpad."
+        ) from GPIO_IMPORT_ERROR
+
+
+def setup(
+    row_pins: Sequence[int] = ROW_PINS,
+    col_pins: Sequence[int] = COL_PINS,
+) -> None:
+    _ensure_gpio_available()
     GPIO.setmode(GPIO.BCM)
     GPIO.setwarnings(False)
 
-    # Set row pins as outputs, initialized to HIGH
-    for row_pin in ROW_PINS:
+    for row_pin in row_pins:
         GPIO.setup(row_pin, GPIO.OUT)
         GPIO.output(row_pin, GPIO.HIGH)
 
-    # Set column pins as inputs with internal pull-up resistors enabled
-    for col_pin in COL_PINS:
+    for col_pin in col_pins:
         GPIO.setup(col_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
-def read_keypad():
-    """Scans the keypad matrix and returns the pressed key."""
-    pressed_key = None
 
-    for i, row_pin in enumerate(ROW_PINS):
-        # Drive the current row LOW to check for connections
+def read_keypad(
+    row_pins: Sequence[int] = ROW_PINS,
+    col_pins: Sequence[int] = COL_PINS,
+    keypad: Sequence[Sequence[str]] = KEYPAD,
+) -> str | None:
+    _ensure_gpio_available()
+
+    for row_index, row_pin in enumerate(row_pins):
         GPIO.output(row_pin, GPIO.LOW)
 
-        for j, col_pin in enumerate(COL_PINS):
-            # If a button is pressed, the column pin will be pulled LOW by the row
-            if GPIO.input(col_pin) == GPIO.LOW:
-                pressed_key = KEYPAD[i][j]
-                
-                # Debounce and wait for key release to prevent multiple triggers
-                while GPIO.input(col_pin) == GPIO.LOW:
-                    time.sleep(0.01)
+        try:
+            for col_index, col_pin in enumerate(col_pins):
+                if GPIO.input(col_pin) == GPIO.LOW:
+                    pressed_key = keypad[row_index][col_index]
+                    while GPIO.input(col_pin) == GPIO.LOW:
+                        time.sleep(0.01)
+                    return pressed_key
+        finally:
+            GPIO.output(row_pin, GPIO.HIGH)
 
-        # Reset the row to HIGH before checking the next one
-        GPIO.output(row_pin, GPIO.HIGH)
+    return None
 
-    return pressed_key
 
-if __name__ == '__main__':
+class MatrixKeypad:
+    def __init__(
+        self,
+        on_key: KeyCallback,
+        *,
+        row_pins: Sequence[int] = ROW_PINS,
+        col_pins: Sequence[int] = COL_PINS,
+        keypad: Sequence[Sequence[str]] = KEYPAD,
+        poll_interval: float = 0.05,
+    ) -> None:
+        _ensure_gpio_available()
+        self.on_key = on_key
+        self.row_pins = list(row_pins)
+        self.col_pins = list(col_pins)
+        self.keypad = [list(row) for row in keypad]
+        self.poll_interval = poll_interval
+        self._stop_event = Event()
+        self._thread: Thread | None = None
+
+    def start(self) -> None:
+        if self._thread is not None:
+            return
+
+        setup(self.row_pins, self.col_pins)
+        self._thread = Thread(target=self._poll_loop, daemon=True)
+        self._thread.start()
+
+    def _poll_loop(self) -> None:
+        while not self._stop_event.is_set():
+            key = self._read_once()
+            if key is not None:
+                self.on_key(key)
+            self._stop_event.wait(self.poll_interval)
+
+    def _read_once(self) -> str | None:
+        for row_index, row_pin in enumerate(self.row_pins):
+            GPIO.output(row_pin, GPIO.LOW)
+
+            try:
+                for col_index, col_pin in enumerate(self.col_pins):
+                    if GPIO.input(col_pin) == GPIO.LOW:
+                        pressed_key = self.keypad[row_index][col_index]
+                        while (
+                            GPIO.input(col_pin) == GPIO.LOW
+                            and not self._stop_event.is_set()
+                        ):
+                            time.sleep(0.01)
+                        return pressed_key
+            finally:
+                GPIO.output(row_pin, GPIO.HIGH)
+
+        return None
+
+    def close(self) -> None:
+        self._stop_event.set()
+        if self._thread is not None:
+            self._thread.join(timeout=1.0)
+            self._thread = None
+
+        try:
+            GPIO.cleanup([*self.row_pins, *self.col_pins])
+        except Exception:
+            pass
+
+
+def main() -> None:
+    setup()
+    print("Keypad initialized successfully.")
+    print("Press any key (Press Ctrl+C to exit)...")
+
     try:
-        setup()
-        print("Keypad initialized successfully.")
-        print("Press any key (Press Ctrl+C to exit)...")
-        
         while True:
             key = read_keypad()
             if key:
                 print(f"Key Pressed: {key}")
-            
-            # Small delay to reduce CPU usage
-            time.sleep(0.05) 
-
+            time.sleep(0.05)
     except KeyboardInterrupt:
         print("\nProgram interrupted. Exiting...")
     finally:
-        # Always clean up GPIO pins on exit
-        GPIO.cleanup()
+        GPIO.cleanup([*ROW_PINS, *COL_PINS])
+
+
+if __name__ == "__main__":
+    main()

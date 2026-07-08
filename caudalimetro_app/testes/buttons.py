@@ -1,39 +1,98 @@
-from gpiozero import Button
+from __future__ import annotations
+
+from collections.abc import Callable, Mapping
 from signal import pause
 
-# Define the GPIO pins for each specific button
+try:
+    from gpiozero import Button
+except (ImportError, RuntimeError) as exc:
+    Button = None
+    GPIOZERO_IMPORT_ERROR = exc
+else:
+    GPIOZERO_IMPORT_ERROR = None
+
+
 BUTTON_CONFIG = {
     "Cima": 20,
     "Baixo": 16,
     "Vermelho": 5,
     "Verde": 1,
-    "Azul": 7
+    "Azul": 7,
 }
 
-# Dictionary to store the initialized Button objects
-buttons = {}
+ButtonCallback = Callable[[str], None]
+ButtonCallbacks = ButtonCallback | Mapping[str, ButtonCallback]
 
-def button_pressed(button_name):
-    """Callback function triggered when a button is pressed."""
+
+class PhysicalButtonPanel:
+    def __init__(
+        self,
+        on_pressed: ButtonCallbacks | None = None,
+        on_released: ButtonCallbacks | None = None,
+        *,
+        button_config: Mapping[str, int] = BUTTON_CONFIG,
+        bounce_time: float = 0.05,
+    ) -> None:
+        if Button is None:
+            raise RuntimeError(
+                "A biblioteca gpiozero nao esta disponivel. "
+                "Instale-a no Raspberry Pi para usar os botoes fisicos."
+            ) from GPIOZERO_IMPORT_ERROR
+
+        self._on_pressed = on_pressed
+        self._on_released = on_released
+        self.buttons: dict[str, Button] = {}
+
+        for name, pin in button_config.items():
+            btn = Button(pin, bounce_time=bounce_time)
+            btn.when_pressed = lambda button_name=name: self._dispatch(
+                self._on_pressed,
+                button_name,
+            )
+            btn.when_released = lambda button_name=name: self._dispatch(
+                self._on_released,
+                button_name,
+            )
+            self.buttons[name] = btn
+
+    @staticmethod
+    def _dispatch(callbacks: ButtonCallbacks | None, button_name: str) -> None:
+        if callbacks is None:
+            return
+
+        if callable(callbacks):
+            callbacks(button_name)
+            return
+
+        callback = callbacks.get(button_name)
+        if callback is not None:
+            callback(button_name)
+
+    def close(self) -> None:
+        for btn in self.buttons.values():
+            btn.when_pressed = None
+            btn.when_released = None
+            btn.close()
+        self.buttons.clear()
+
+
+def button_pressed(button_name: str) -> None:
     print(f"[{button_name}] was pressed!")
 
-def button_released(button_name):
-    """Callback function triggered when a button is released."""
+
+def button_released(button_name: str) -> None:
     print(f"[{button_name}] was released!")
 
-# Initialize buttons and assign their event handlers
-for name, pin in BUTTON_CONFIG.items():
-    # gpiozero automatically configures the internal pull-up resistor by default
-    btn = Button(pin)
-    
-    # We use a lambda function with a default argument (n=name) 
-    # to "capture" the specific button's name during the loop.
-    btn.when_pressed = lambda n=name: button_pressed(n)
-    btn.when_released = lambda n=name: button_released(n)
-    
-    buttons[name] = btn
 
-print("Program is running. Press any of the buttons (Press Ctrl+C to exit)...")
+def main() -> None:
+    panel = PhysicalButtonPanel(button_pressed, button_released)
+    print("Program is running. Press any of the buttons (Press Ctrl+C to exit)...")
 
-# Keep the program running to listen for events
-pause()
+    try:
+        pause()
+    finally:
+        panel.close()
+
+
+if __name__ == "__main__":
+    main()

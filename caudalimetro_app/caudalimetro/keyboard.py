@@ -73,6 +73,36 @@ class KeyboardMixin:
             self.add_char(".")
             return
 
+    def on_physical_button(self, button_name: str) -> None:
+        actions = {
+            "Cima": lambda: self.move(-1),
+            "Baixo": lambda: self.move(1),
+            "Vermelho": self.delete_one,
+            "Verde": self.select,
+            "Azul": self.confirm,
+        }
+
+        action = actions.get(button_name)
+        if action is None:
+            return
+
+        action()
+        self.restore_keyboard_focus()
+
+    def on_keypad_key(self, key: str) -> None:
+        if key == "#":
+            self.confirm()
+        elif key == "*":
+            self.delete_all()
+        elif key.isdigit():
+            self.add_char(key)
+        elif key in (".", ","):
+            self.add_char(".")
+        else:
+            return
+
+        self.restore_keyboard_focus()
+
     def move(self, delta: int) -> None:
         if self.screen == "LOGIN":
             if self.operator_list_open:
