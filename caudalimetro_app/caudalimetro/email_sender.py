@@ -2,310 +2,340 @@ from __future__ import annotations
 
 import json
 import mimetypes
-import os
 import smtplib
 import ssl
 import threading
-import webbrowser
-from datetime import datetime
 from email.message import EmailMessage
-from email.utils import formatdate, make_msgid
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
-from .config import BASE_DIR, MAIL_DRAFTS_DIR, PDF_EXPORTS_DIR
+from .config import DATA_DIR, PDF_EXPORTS_DIR
 
 
-DEFAULT_CONFIG_PATH = BASE_DIR / "data" / "email_config.json"
+EMAIL_CONFIG_PATH = DATA_DIR / "email_config.json"
+EmailResultCallback = Callable[[bool, str], None]
 
 
-# ---------------------------------------------------------------------------
-# Configuração
-# ---------------------------------------------------------------------------
-
-def load_email_config(config_path: str | Path = DEFAULT_CONFIG_PATH) -> dict[str, Any]:
+def load_email_config(config_path: str | Path = EMAIL_CONFIG_PATH) -> dict[str, Any]:
     path = Path(config_path)
+
     if not path.exists():
-        raise FileNotFoundError(f"Ficheiro de configuração de email não encontrado: {path}")
+        raise FileNotFoundError(f"Ficheiro de configuração não encontrado: {path}")
 
     with path.open("r", encoding="utf-8") as file:
         config = json.load(file)
 
     if not isinstance(config, dict):
-        raise RuntimeError("Configuração de email inválida.")
+        raise ValueError("Configuração de email inválida.")
 
     return config
-
-
-def _resolve_app_path(path: str | Path) -> Path:
-    resolved = Path(path)
-    if resolved.is_absolute():
-        return resolved
-    return BASE_DIR / resolved
 
 
 def _as_list(value: Any) -> list[str]:
     if isinstance(value, list):
         return [str(item).strip() for item in value if str(item).strip()]
+
     if isinstance(value, str) and value.strip():
         return [value.strip()]
+
     return []
 
 
-# ---------------------------------------------------------------------------
-# Seleção dos anexos
-# ---------------------------------------------------------------------------
-
-def get_related_json_path(pdf_path: str | Path) -> Path | None:
-    pdf_path = Path(pdf_path)
-    json_path = pdf_path.with_suffix(".json")
-    if json_path.exists() and json_path.is_file():
-        return json_path
-    return None
+def _format_template(template: str, context: dict[str, Any]) -> str:
+    try:
+        return template.format(**context)
+    except KeyError:
+        return template
 
 
-def get_files_for_selected_pdf(
-    pdf_path: str | Path,
-    json_path: str | Path | None = None,
-    *,
-    require_pdf_and_json: bool = True,
-) -> list[Path]:
-    pdf = Path(pdf_path)
-    if not pdf.exists() or not pdf.is_file():
-        raise FileNotFoundError(f"PDF não encontrado: {pdf}")
+def _export_directory(config: dict[str, Any] | None = None) -> Path:
+    if not config:
+        return PDF_EXPORTS_DIR
 
-    if json_path is None:
-        manifest = get_related_json_path(pdf)
-    else:
-        manifest = Path(json_path)
+    export_dir = config.get("exports", {}).get("directory")
 
-    if require_pdf_and_json and (manifest is None or not manifest.exists() or not manifest.is_file()):
-        raise FileNotFoundError(f"JSON respetivo em falta para o PDF: {pdf.name}")
+    if not export_dir:
+        return PDF_EXPORTS_DIR
 
-    files = [pdf]
-    if manifest is not None and manifest.exists() and manifest.is_file():
-        files.append(manifest)
+    path = Path(str(export_dir))
 
-    return files
+    if path.is_absolute():
+        return path
+
+    return DATA_DIR.parent / path
 
 
-def get_files_for_all_exports(config: dict[str, Any]) -> list[Path]:
-    exports_config = config.get("exports", {})
-    automatic_config = config.get("automatic_send", {})
-    export_dir = _resolve_app_path(exports_config.get("directory", "data/pdf_exportados"))
-    include_json = bool(exports_config.get("include_json", True))
-    require_pdf_and_json = bool(
-        automatic_config.get(
-            "require_pdf_and_json",
-            exports_config.get("require_pdf_and_json", True),
-        )
-    )
+def exported_pdf_json_pairs(
+    export_dir: Path = PDF_EXPORTS_DIR,
+) -> list[tuple[Path, Path]]:
+    pairs: list[tuple[Path, Path]] = []
 
     if not export_dir.exists():
-        return []
-
-    files: list[Path] = []
-    seen: set[Path] = set()
+        return pairs
 
     for pdf_path in sorted(export_dir.glob("*.pdf")):
-        json_path = get_related_json_path(pdf_path)
+        json_path = pdf_path.with_suffix(".json")
 
-        if require_pdf_and_json and json_path is None:
-            continue
+        if json_path.exists() and json_path.is_file():
+            pairs.append((pdf_path, json_path))
 
-        if pdf_path not in seen:
-            files.append(pdf_path)
-            seen.add(pdf_path)
-
-        if include_json and json_path is not None and json_path not in seen:
-            files.append(json_path)
-            seen.add(json_path)
-
-    return files
+    return pairs
 
 
-def count_pdf_json_pairs(config: dict[str, Any]) -> int:
-    exports_config = config.get("exports", {})
-    export_dir = _resolve_app_path(exports_config.get("directory", "data/pdf_exportados"))
-    if not export_dir.exists():
-        return 0
-    return sum(1 for pdf_path in export_dir.glob("*.pdf") if get_related_json_path(pdf_path))
+def has_exported_pdf_json_pairs(config: dict[str, Any] | None = None) -> bool:
+    return bool(exported_pdf_json_pairs(_export_directory(config)))
 
 
-def has_exported_pdf_json_pairs(config: dict[str, Any]) -> bool:
-    return count_pdf_json_pairs(config) > 0
-
-
-# ---------------------------------------------------------------------------
-# Envio real por SMTP
-# ---------------------------------------------------------------------------
-
-def send_email_with_attachments(
-    *,
-    config: dict[str, Any],
-    attachments: list[Path],
-    subject: str,
-    body: str,
-) -> None:
+def _smtp_send_message(config: dict[str, Any], message: EmailMessage) -> None:
     if not config.get("enabled", False):
-        raise RuntimeError("O envio de email está desativado na configuração.")
+        raise RuntimeError("O envio de email está desativado.")
 
-    if not attachments:
-        raise RuntimeError("Não existem ficheiros para enviar.")
+    smtp_config = config["smtp"]
+    account = config["account"]
+    recipients = config["recipients"]
 
-    for attachment in attachments:
-        if not attachment.exists() or not attachment.is_file():
-            raise FileNotFoundError(f"Ficheiro em falta: {attachment.name}")
+    password = str(account.get("password") or "").strip()
 
-    smtp_config = config.get("smtp", {})
-    account = config.get("account", {})
-    recipients = config.get("recipients", {})
-
-    sender_name = str(account.get("sender_name") or "").strip()
-    sender_email = str(account.get("sender_email") or "").strip()
-    username = str(account.get("username") or sender_email).strip()
-    password_env = str(account.get("password_env") or "").strip()
-
-    if not sender_email or not username or not password_env:
-        raise RuntimeError("Configuração da conta de email incompleta.")
-
-    password = os.environ.get(password_env)
     if not password:
-        raise RuntimeError(f"Variável de ambiente em falta: {password_env}")
+        raise RuntimeError("Password de email em falta no email_config.json.")
 
     to_recipients = _as_list(recipients.get("to"))
     cc_recipients = _as_list(recipients.get("cc"))
     bcc_recipients = _as_list(recipients.get("bcc"))
+
     all_recipients = to_recipients + cc_recipients + bcc_recipients
 
     if not all_recipients:
         raise RuntimeError("Não existem destinatários configurados.")
 
-    message = EmailMessage()
-    if sender_name:
-        message["From"] = f"{sender_name} <{sender_email}>"
-    else:
-        message["From"] = sender_email
-    message["To"] = ", ".join(to_recipients)
-    if cc_recipients:
-        message["Cc"] = ", ".join(cc_recipients)
-    message["Subject"] = subject
-    message.set_content(body)
+    sender_email = str(account["sender_email"])
+    username = str(account.get("username") or sender_email)
 
-    for file_path in attachments:
-        content_type, encoding = mimetypes.guess_type(file_path.name)
-        if content_type is None or encoding is not None:
-            maintype, subtype = "application", "octet-stream"
-        else:
-            maintype, subtype = content_type.split("/", 1)
+    timeout = int(smtp_config.get("timeout_seconds", 20))
+    security = str(smtp_config.get("security", "starttls")).lower()
 
-        message.add_attachment(
-            file_path.read_bytes(),
-            maintype=maintype,
-            subtype=subtype,
-            filename=file_path.name,
-        )
-
-    host = str(smtp_config.get("host") or "").strip()
-    port = int(smtp_config.get("port") or 587)
-    security = str(smtp_config.get("security") or "starttls").lower().strip()
-    timeout = int(smtp_config.get("timeout_seconds") or 20)
     ssl_context = ssl.create_default_context()
 
     if security == "ssl":
-        with smtplib.SMTP_SSL(host, port, timeout=timeout, context=ssl_context) as server:
+        with smtplib.SMTP_SSL(
+            str(smtp_config["host"]),
+            int(smtp_config["port"]),
+            timeout=timeout,
+            context=ssl_context,
+        ) as server:
             server.login(username, password)
-            server.send_message(message, from_addr=sender_email, to_addrs=all_recipients)
+            server.send_message(
+                message,
+                from_addr=sender_email,
+                to_addrs=all_recipients,
+            )
         return
 
-    with smtplib.SMTP(host, port, timeout=timeout) as server:
+    with smtplib.SMTP(
+        str(smtp_config["host"]),
+        int(smtp_config["port"]),
+        timeout=timeout,
+    ) as server:
         server.ehlo()
+
         if security == "starttls":
             server.starttls(context=ssl_context)
             server.ehlo()
+
         server.login(username, password)
-        server.send_message(message, from_addr=sender_email, to_addrs=all_recipients)
+        server.send_message(
+            message,
+            from_addr=sender_email,
+            to_addrs=all_recipients,
+        )
+
+
+def send_email_with_attachments(
+    *,
+    config: dict[str, Any],
+    subject: str,
+    body: str,
+    attachment_paths: Iterable[Path],
+) -> tuple[bool, str]:
+    paths = [Path(path) for path in attachment_paths]
+
+    if not paths:
+        return False, "Não existem ficheiros para enviar."
+
+    for path in paths:
+        if not path.exists() or not path.is_file():
+            return False, f"Ficheiro em falta: {path.name}"
+
+    try:
+        account = config["account"]
+        recipients = config["recipients"]
+
+        to_recipients = _as_list(recipients.get("to"))
+        cc_recipients = _as_list(recipients.get("cc"))
+
+        sender_name = str(account.get("sender_name") or "").strip()
+        sender_email = str(account["sender_email"])
+
+        message = EmailMessage()
+
+        if sender_name:
+            message["From"] = f"{sender_name} <{sender_email}>"
+        else:
+            message["From"] = sender_email
+
+        message["To"] = ", ".join(to_recipients)
+
+        if cc_recipients:
+            message["Cc"] = ", ".join(cc_recipients)
+
+        message["Subject"] = subject
+        message.set_content(body)
+
+        for path in paths:
+            content_type, encoding = mimetypes.guess_type(path.name)
+
+            if content_type is None or encoding is not None:
+                maintype, subtype = "application", "octet-stream"
+            else:
+                maintype, subtype = content_type.split("/", 1)
+
+            message.add_attachment(
+                path.read_bytes(),
+                maintype=maintype,
+                subtype=subtype,
+                filename=path.name,
+            )
+
+        _smtp_send_message(config, message)
+
+    except Exception as exc:
+        return False, f"Não foi possível enviar o email: {exc}"
+
+    return True, f"Email enviado com {len(paths)} anexo(s)."
 
 
 def send_selected_export_email(
     *,
     config: dict[str, Any],
-    pdf_path: str | Path,
-    json_path: str | Path | None = None,
-    molde: str = "-",
-) -> None:
-    exports_config = config.get("exports", {})
-    automatic_config = config.get("automatic_send", {})
-    require_pdf_and_json = bool(
-        automatic_config.get(
-            "require_pdf_and_json",
-            exports_config.get("require_pdf_and_json", True),
-        )
-    )
+    pdf_path: Path,
+    json_path: Path,
+    mold: str | None = None,
+    molde: str | None = None,
+    file_name: str | None = None,
+) -> tuple[bool, str]:
+    pdf_path = Path(pdf_path)
+    json_path = Path(json_path)
 
-    attachments = get_files_for_selected_pdf(
-        pdf_path,
-        json_path,
-        require_pdf_and_json=require_pdf_and_json,
-    )
+    if not pdf_path.exists():
+        return False, f"Ficheiro em falta: {pdf_path.name}"
 
-    pdf = Path(pdf_path)
-    manifest = Path(json_path) if json_path is not None else get_related_json_path(pdf)
+    if not json_path.exists():
+        return False, f"Ficheiro em falta: {json_path.name}"
 
     message_config = config.get("messages", {}).get("single", {})
-    context = {
-        "molde": molde,
-        "pdf_nome": pdf.name,
-        "json_nome": manifest.name if manifest is not None else "-",
-        "total_ficheiros": len(attachments),
-    }
-    subject = str(message_config.get("subject") or "Registo de caudais - Molde {molde}").format(**context)
-    body = str(message_config.get("body") or "Segue em anexo o registo de caudais.").format(**context)
+    selected_mold = str(mold if mold is not None else molde or "").strip() or "-"
+    selected_file_name = str(file_name or pdf_path.name)
 
-    send_email_with_attachments(
+    context = {
+        "molde": selected_mold,
+        "mold": selected_mold,
+        "ficheiro": selected_file_name,
+        "pdf_nome": pdf_path.name,
+        "json_nome": json_path.name,
+        "total_ficheiros": 2,
+    }
+
+    subject = _format_template(
+        str(message_config.get("subject") or "Registo de caudais - Molde {molde}"),
+        context,
+    )
+
+    body = _format_template(
+        str(
+            message_config.get("body")
+            or "Segue em anexo o PDF de registo de caudais e o respetivo JSON."
+        ),
+        context,
+    )
+
+    return send_email_with_attachments(
         config=config,
-        attachments=attachments,
         subject=subject,
         body=body,
+        attachment_paths=[pdf_path, json_path],
     )
 
 
-def send_all_exports_email(*, config: dict[str, Any]) -> None:
-    attachments = get_files_for_all_exports(config)
-    if not attachments:
-        raise RuntimeError("Não existem pares PDF/JSON exportados para enviar.")
+def send_all_exports_email(config: dict[str, Any]) -> tuple[bool, str]:
+    pairs = exported_pdf_json_pairs(_export_directory(config))
+
+    if not pairs:
+        return False, "Não existem pares PDF + JSON para enviar."
+
+    attachments: list[Path] = []
+
+    for pdf_path, json_path in pairs:
+        attachments.append(pdf_path)
+        attachments.append(json_path)
 
     message_config = config.get("messages", {}).get("all", {})
-    context = {
-        "total_ficheiros": len(attachments),
-        "total_pares": count_pdf_json_pairs(config),
-    }
-    subject = str(message_config.get("subject") or "Registos de caudais exportados").format(**context)
-    body = str(message_config.get("body") or "Seguem em anexo os registos de caudais exportados.").format(**context)
 
-    send_email_with_attachments(
+    context = {
+        "total_pares": len(pairs),
+        "total_pdfs": len(pairs),
+        "total_ficheiros": len(attachments),
+    }
+
+    subject = _format_template(
+        str(message_config.get("subject") or "Registos de caudais exportados"),
+        context,
+    )
+
+    body = _format_template(
+        str(
+            message_config.get("body")
+            or "Seguem em anexo todos os PDFs exportados e os respetivos JSON."
+        ),
+        context,
+    )
+
+    return send_email_with_attachments(
         config=config,
-        attachments=attachments,
         subject=subject,
         body=body,
+        attachment_paths=attachments,
     )
 
 
-def _run_async(
-    callback: Callable[[], None],
-    on_result: Callable[[bool, str], None] | None = None,
-) -> threading.Thread:
-    def worker() -> None:
-        try:
-            callback()
-        except Exception as exc:
-            if on_result:
-                on_result(False, str(exc))
-            return
-        if on_result:
-            on_result(True, "Email enviado com sucesso.")
+def should_send_automatically(config: dict[str, Any]) -> bool:
+    automatic_config = config.get("automatic_send", {})
 
-    thread = threading.Thread(target=worker, daemon=True)
+    if not config.get("enabled", False):
+        return False
+
+    if not automatic_config.get("enabled", False):
+        return False
+
+    if automatic_config.get("require_pdf_and_json", True):
+        return has_exported_pdf_json_pairs(config)
+
+    return True
+
+
+def _send_email_async(
+    send_func: Callable[[], tuple[bool, str]],
+    on_result: EmailResultCallback | None,
+) -> threading.Thread:
+    def run() -> None:
+        try:
+            success, message = send_func()
+        except Exception as exc:
+            success, message = False, str(exc)
+
+        if on_result is not None:
+            on_result(success, message)
+
+    thread = threading.Thread(target=run, daemon=True)
     thread.start()
     return thread
 
@@ -313,163 +343,64 @@ def _run_async(
 def send_selected_export_email_async(
     *,
     config: dict[str, Any],
-    pdf_path: str | Path,
-    json_path: str | Path | None = None,
-    molde: str = "-",
-    on_result: Callable[[bool, str], None] | None = None,
+    pdf_path: Path,
+    json_path: Path,
+    mold: str | None = None,
+    molde: str | None = None,
+    file_name: str | None = None,
+    on_result: EmailResultCallback | None = None,
 ) -> threading.Thread:
-    return _run_async(
+    return _send_email_async(
         lambda: send_selected_export_email(
             config=config,
             pdf_path=pdf_path,
             json_path=json_path,
+            mold=mold,
             molde=molde,
+            file_name=file_name,
         ),
-        on_result=on_result,
+        on_result,
     )
 
 
 def send_all_exports_email_async(
     *,
     config: dict[str, Any],
-    on_result: Callable[[bool, str], None] | None = None,
+    on_result: EmailResultCallback | None = None,
 ) -> threading.Thread:
-    return _run_async(
-        lambda: send_all_exports_email(config=config),
-        on_result=on_result,
-    )
-
-
-def should_send_automatically(config: dict[str, Any]) -> bool:
-    automatic_config = config.get("automatic_send", {})
-    return bool(config.get("enabled")) and bool(automatic_config.get("enabled"))
+    return _send_email_async(lambda: send_all_exports_email(config), on_result)
 
 
 def send_automatic_exports_if_configured(
     *,
-    pdf_path: str | Path | None = None,
-    json_path: str | Path | None = None,
-    molde: str = "-",
+    pdf_path: Path | None = None,
+    json_path: Path | None = None,
+    mold: str | None = None,
+    molde: str | None = None,
+    config_path: str | Path = EMAIL_CONFIG_PATH,
 ) -> tuple[bool, str]:
     try:
-        config = load_email_config()
+        config = load_email_config(config_path)
     except Exception as exc:
-        return False, f"Email automático não configurado: {exc}"
+        return False, f"Configuracao de email invalida: {exc}"
 
     if not should_send_automatically(config):
-        return False, "Email automático desativado."
+        return False, "Envio automatico desativado."
 
-    if not has_exported_pdf_json_pairs(config):
-        return False, "Email automático ignorado: não existem pares PDF/JSON exportados."
+    automatic_config = config.get("automatic_send", {})
+    scope = str(automatic_config.get("scope") or "last_export").strip().casefold()
 
-    scope = str(config.get("automatic_send", {}).get("scope") or "last_export")
+    if scope == "all":
+        return send_all_exports_email(config)
 
-    try:
-        if scope == "all_exports":
-            send_all_exports_email_async(config=config)
-            return True, "Envio automático de todos os exportados iniciado."
+    if pdf_path is None or json_path is None:
+        return False, "Ficheiros de exportacao em falta."
 
-        if pdf_path is None:
-            return False, "Email automático ignorado: PDF exportado não indicado."
-
-        send_selected_export_email_async(
-            config=config,
-            pdf_path=pdf_path,
-            json_path=json_path,
-            molde=molde,
-        )
-        return True, "Envio automático do PDF exportado iniciado."
-    except Exception as exc:
-        return False, f"Email automático falhou: {exc}"
-
-
-# ---------------------------------------------------------------------------
-# Funções antigas mantidas como alternativa local: Outlook / ficheiro .eml
-# ---------------------------------------------------------------------------
-
-def open_email_with_attachments(
-    subject: str,
-    body: str,
-    attachment_paths: Iterable[Path],
-) -> tuple[bool, str]:
-    paths = [Path(path) for path in attachment_paths]
-    if not paths:
-        return False, "Nao existem ficheiros para anexar."
-
-    for path in paths:
-        if not path.exists() or not path.is_file():
-            return False, f"Ficheiro em falta: {path.name}"
-
-    outlook_success, outlook_message = open_outlook_email(subject, body, paths)
-    if outlook_success:
-        return True, outlook_message
-
-    try:
-        draft_path = create_eml_draft(subject, body, paths)
-        open_local_file(draft_path)
-    except OSError as exc:
-        return False, f"Nao foi possivel preparar o email: {exc}"
-
-    return True, f"Email preparado: {draft_path.name}"
-
-
-def open_outlook_email(subject: str, body: str, attachment_paths: list[Path]) -> tuple[bool, str]:
-    try:
-        import win32com.client  # type: ignore[import-not-found]
-    except ImportError:
-        return False, "Outlook COM indisponivel."
-
-    try:
-        outlook = win32com.client.Dispatch("Outlook.Application")
-        mail = outlook.CreateItem(0)
-        mail.Subject = subject
-        mail.Body = body
-        for path in attachment_paths:
-            mail.Attachments.Add(str(path.resolve()))
-        mail.Display()
-    except Exception as exc:  # pragma: no cover - depends on local Outlook setup.
-        return False, f"Outlook indisponivel: {exc}"
-
-    return True, "Email aberto no Outlook com os anexos."
-
-
-def create_eml_draft(subject: str, body: str, attachment_paths: list[Path]) -> Path:
-    message = EmailMessage()
-    message["Subject"] = subject
-    message["Date"] = formatdate(localtime=True)
-    message["Message-ID"] = make_msgid()
-    message["X-Unsent"] = "1"
-    message.set_content(body)
-
-    for path in attachment_paths:
-        content_type, encoding = mimetypes.guess_type(path.name)
-        if content_type is None or encoding is not None:
-            maintype, subtype = "application", "octet-stream"
-        else:
-            maintype, subtype = content_type.split("/", 1)
-        message.add_attachment(
-            path.read_bytes(),
-            maintype=maintype,
-            subtype=subtype,
-            filename=path.name,
-        )
-
-    MAIL_DRAFTS_DIR.mkdir(parents=True, exist_ok=True)
-    draft_name = datetime.now().strftime("email_caudais_%Y%m%d_%H%M%S.eml")
-    draft_path = MAIL_DRAFTS_DIR / draft_name
-    counter = 1
-    while draft_path.exists():
-        draft_path = MAIL_DRAFTS_DIR / f"{Path(draft_name).stem}_{counter}.eml"
-        counter += 1
-
-    draft_path.write_bytes(message.as_bytes())
-    return draft_path
-
-
-def open_local_file(path: Path) -> None:
-    if os.name == "nt":
-        os.startfile(str(path))  # type: ignore[attr-defined]
-        return
-
-    if not webbrowser.open(path.resolve().as_uri()):
-        raise OSError("nao foi possivel abrir o rascunho de email")
+    return send_selected_export_email(
+        config=config,
+        pdf_path=Path(pdf_path),
+        json_path=Path(json_path),
+        mold=mold,
+        molde=molde,
+        file_name=Path(pdf_path).name,
+    )
