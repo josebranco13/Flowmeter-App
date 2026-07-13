@@ -273,13 +273,14 @@ class ScreensMixin:
         self.build_login_footer(
             root,
             black_text="Voltar atrás",
-            black_command=self.go_back,
+            black_command=self.close_credits,
             red_text="-",
             red_command=self.no_action,
         )
 
         # 2. CREATE A CANVAS FOR SCROLLING
         canvas = tk.Canvas(root, bg=WHITE, bd=0, highlightthickness=0)
+        self.credits_canvas = canvas
         canvas.pack(side="top", fill="both", expand=True)
 
         # 3. CREATE THE CONTENT FRAME INSIDE THE CANVAS
@@ -327,14 +328,29 @@ class ScreensMixin:
             justify="center",
         ).pack(side="top", pady=(10, 40)) 
 
-        # 5. KEYBOARD SCROLLING BINDINGS
-        # FIX 2: Check if canvas.winfo_exists() to prevent the TclError on screen exit
-        def scroll(event, direction):
-            if self.screen == "CREDITS" and canvas.winfo_exists():
-                canvas.yview_scroll(direction, "units")
+    def scroll_credits(self, delta: int) -> bool:
+        if self.screen != "CREDITS":
+            return False
 
-        self.bind("<Up>", lambda e: scroll(e, -1), add="+")
-        self.bind("<Down>", lambda e: scroll(e, 1), add="+")
+        canvas = getattr(self, "credits_canvas", None)
+        if canvas is None:
+            return False
+
+        try:
+            if not canvas.winfo_exists():
+                return False
+            canvas.yview_scroll(delta, "units")
+        except tk.TclError:
+            return False
+
+        return True
+
+    def close_credits(self) -> None:
+        self.credits_canvas = None
+        self.login_active_field = 0
+        self.operator_list_open = False
+        self.status_text = ""
+        self.show_login()
 
     def build_login_footer(
         self,

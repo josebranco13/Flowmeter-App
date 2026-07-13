@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import unicodedata
 import tkinter as tk
 
 
@@ -75,19 +76,31 @@ class KeyboardMixin:
 
     def on_physical_button(self, button_name: str) -> None:
         actions = {
-            "Cima": lambda: self.move(-1),
-            "Baixo": lambda: self.move(1),
-            "Vermelho": self.delete_one,
-            "Verde": self.select,
-            "Azul": self.confirm,
+            "voltar": self.go_back,
+            "voltar atras": self.go_back,
+            "preto": self.go_back,
+            "black": self.go_back,
+            "cima": lambda: self.move(-1),
+            "up": lambda: self.move(-1),
+            "baixo": lambda: self.move(1),
+            "down": lambda: self.move(1),
+            "vermelho": self.delete_one,
+            "verde": self.select,
+            "azul": self.confirm,
         }
 
-        action = actions.get(button_name)
+        action = actions.get(self.normalized_physical_button_name(button_name))
         if action is None:
             return
 
         action()
         self.restore_keyboard_focus()
+
+    @staticmethod
+    def normalized_physical_button_name(button_name: str) -> str:
+        text = unicodedata.normalize("NFKD", str(button_name))
+        text = text.encode("ascii", "ignore").decode("ascii")
+        return " ".join(text.replace("_", " ").replace("-", " ").lower().split())
 
     def on_keypad_key(self, key: str) -> None:
         if key == "#":
@@ -136,6 +149,8 @@ class KeyboardMixin:
             ) % len(self.admin_menu_options())
             if not self.update_option_selection():
                 self.show_admin_menu()
+        elif self.screen == "CREDITS":
+            self.scroll_credits(delta)
         elif self.screen == "DIAMETER":
             self.move_diameter_selection(delta)
             if not self.update_diameter_selection():
@@ -396,6 +411,10 @@ class KeyboardMixin:
             self.cancel_admin_operator_removal()
 
     def select(self) -> None:
+        if self.screen == "CREDITS":
+            self.close_credits()
+            return
+
         if self.screen == "LOGIN":
             if self.login_active_field == 0:
                 self.select_login_operator()
@@ -524,6 +543,10 @@ class KeyboardMixin:
         self.show_login()
 
     def confirm(self) -> None:
+        if self.screen == "CREDITS":
+            self.close_credits()
+            return
+
         if self.screen == "LOGIN":
             if self.login_active_field == 2:
                 self.show_credits()
@@ -733,6 +756,9 @@ class KeyboardMixin:
         if self.screen == "LOGIN":
             self.clear_login_values()
             return
+        if self.screen == "CREDITS":
+            self.close_credits()
+            return
         if self.screen == "MENU":
             self.logout_to_login()
             return
@@ -821,8 +847,6 @@ class KeyboardMixin:
             self.cancel_admin_reset_password()
         elif self.screen == "ADMIN_REMOVE_CONFIRM":
             self.cancel_admin_operator_removal()
-        elif self.screen == "CREDITS":
-            self.show_login()
         elif self.screen == "SUMMARY":
             self.show_menu()
 
