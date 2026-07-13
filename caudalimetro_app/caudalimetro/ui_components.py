@@ -3,8 +3,10 @@ from __future__ import annotations
 import tkinter as tk
 
 from .config import (
+    APP_WIDTH,
     BLUE,
     DARK_PANEL,
+    FOOTER_FONT_SIZE,
     GREEN,
     GREY,
     PANEL_BG,
@@ -62,7 +64,7 @@ class UiComponentsMixin:
                     text=step,
                     bg=WHITE,
                     fg="#777777",
-                    font=("Arial", 11),
+                    font=("Arial", 14),
                 ).pack(side="right")
 
         self.build_footer(
@@ -83,7 +85,9 @@ class UiComponentsMixin:
                 text=self.status_text,
                 bg=WHITE,
                 fg="#c48b00",
-                font=("Arial", 12, "bold"),
+                font=("Arial", 14, "bold"),
+                wraplength=APP_WIDTH - 44,
+                justify="center",
             ).pack(side="bottom", fill="x", pady=(0, 4))
 
         body = tk.Frame(root, bg=WHITE)
@@ -94,14 +98,14 @@ class UiComponentsMixin:
         return panel
 
     def build_keypad_help(self, parent: tk.Widget) -> tk.Frame:
-        frame = tk.Frame(parent, bg=DARK_PANEL, width=180, height=310)
+        frame = tk.Frame(parent, bg=DARK_PANEL, width=230, height=340)
         frame.pack_propagate(False)
         tk.Label(
             frame,
             text="Comandos",
             bg=DARK_PANEL,
             fg=WHITE,
-            font=("Arial", 13, "bold"),
+            font=("Arial", 14, "bold"),
         ).pack(pady=(12, 8))
 
         rows = [
@@ -121,7 +125,7 @@ class UiComponentsMixin:
                 width=9,
                 bg="#3b82f6",
                 fg=WHITE,
-                font=("Arial", 11, "bold"),
+                font=("Arial", 14, "bold"),
                 padx=6,
                 pady=4,
             ).pack(side="left")
@@ -130,7 +134,7 @@ class UiComponentsMixin:
                 text=desc,
                 bg=DARK_PANEL,
                 fg="#dce3ec",
-                font=("Arial", 10),
+                font=("Arial", 14),
             ).pack(side="left", padx=8)
         return frame
 
@@ -161,6 +165,7 @@ class UiComponentsMixin:
         if select_text is not None:
             buttons.append((select_text, GREEN, PANEL_FG, select_command))
         buttons.append((confirm_text, BLUE, PANEL_FG, confirm_command))
+        button_wrap_length = APP_WIDTH // len(buttons) - 16
         for text, color, fg, command in buttons:
             tk.Button(
                 footer,
@@ -175,7 +180,9 @@ class UiComponentsMixin:
                 bd=0,
                 borderwidth=0,
                 highlightthickness=0,
-                font=("Arial", 12),
+                font=("Arial", FOOTER_FONT_SIZE),
+                wraplength=button_wrap_length,
+                justify="center",
                 pady=16,
             ).pack(side="left", expand=True, fill="both")
 

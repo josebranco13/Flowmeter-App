@@ -9,14 +9,18 @@ from PIL import Image, ImageTk
 
 from .config import (
     APP_HEIGHT,
+    APP_WIDTH,
     BLUE,
     BLACK,
     DIAMETER_LABELS,
     GREEN,
     GREY,
+    FOOTER_FONT_SIZE,
     PANEL_BG,
     PANEL_FG,
     RED,
+    RESULTS_TABLE_FONT_SIZE,
+    TABLE_FONT_SIZE,
     WHITE,
 )
 from .email_sender import (
@@ -176,7 +180,9 @@ class ScreensMixin:
                 text=self.status_text,
                 bg=WHITE,
                 fg=RED,
-                font=("Arial", 12, "bold"),
+                font=("Arial", 14, "bold"),
+                wraplength=APP_WIDTH - 120,
+                justify="center",
             ).grid(row=2, column=0, pady=14, sticky="n")
 
         action_area = tk.Frame(root, bg=WHITE)
@@ -371,6 +377,7 @@ class ScreensMixin:
             ("Selecionar", GREEN, PANEL_FG, self.select),
             ("Confirmar", BLUE, PANEL_FG, self.confirm),
         ]
+        button_wrap_length = APP_WIDTH // len(buttons) - 16
         for text, bg, fg, command in buttons:
             tk.Button(
                 footer,
@@ -385,7 +392,9 @@ class ScreensMixin:
                 bd=0,
                 borderwidth=0,
                 highlightthickness=0,
-                font=("Arial", 12),
+                font=("Arial", FOOTER_FONT_SIZE),
+                wraplength=button_wrap_length,
+                justify="center",
                 pady=16,
             ).pack(side="left", expand=True, fill="both")
 
@@ -448,6 +457,7 @@ class ScreensMixin:
             "",
             back_text="Logout",
             back_command=self.logout_to_login,
+            delete_text=None,
             center_title=True,
         )
         panel.configure(bg=WHITE)
@@ -513,7 +523,7 @@ class ScreensMixin:
                 text="Não existem ficheiros PDF exportados.",
                 bg=WHITE,
                 fg="#555555",
-                font=("Arial", 13),
+                font=("Arial", 14),
             ).pack(pady=22)
             return
 
@@ -533,7 +543,7 @@ class ScreensMixin:
         visible_records = records[first_visible_row : first_visible_row + max_rows]
 
         table_area = tk.Frame(panel, bg=WHITE)
-        table_area.pack(fill="x", padx=24, pady=(0, 0))
+        table_area.pack(fill="x", padx=4, pady=(0, 0))
         table = tk.Frame(table_area, bg=WHITE)
         table.pack(side="left", fill="x", expand=True)
         self.bind_exported_records_scroll(table_area)
@@ -552,7 +562,7 @@ class ScreensMixin:
                 text=header,
                 bg="#374151",
                 fg=WHITE,
-                font=("Arial", 10, "bold"),
+                font=("Arial", TABLE_FONT_SIZE, "bold"),
                 width=width,
                 pady=4,
             )
@@ -578,7 +588,7 @@ class ScreensMixin:
                     text=value,
                     bg=bg,
                     fg=fg,
-                    font=("Arial", 10, font_weight),
+                    font=("Arial", TABLE_FONT_SIZE, font_weight),
                     width=headers[col][1],
                     pady=4,
                 )
@@ -612,10 +622,10 @@ class ScreensMixin:
             height = APP_HEIGHT
 
         if height >= 900:
-            return 16
+            return 14
         if height >= 700:
-            return 11
-        return 8
+            return 10
+        return 7
 
     @staticmethod
     def clamp_exported_records_first_row(
@@ -873,7 +883,9 @@ class ScreensMixin:
                 text=admin_status_text,
                 bg=WHITE,
                 fg="#c48b00",
-                font=("Arial", 12, "bold"),
+                font=("Arial", 14, "bold"),
+                wraplength=APP_WIDTH - 120,
+                justify="center",
             ).pack(fill="x", padx=60, pady=(18, 6))
 
         visible_options = self.visible_admin_operator_options()
@@ -912,7 +924,7 @@ class ScreensMixin:
                 text="Sem operadores criados.",
                 bg=WHITE,
                 fg="#555555",
-                font=("Arial", 12),
+                font=("Arial", 14),
             ).pack(fill="x", padx=60, pady=12)
 
     def update_admin_operator_selection(self) -> bool:
@@ -1002,7 +1014,9 @@ class ScreensMixin:
                 text=add_status_text,
                 bg=PANEL_BG,
                 fg="#c48b00",
-                font=("Arial", 12, "bold"),
+                font=("Arial", 14, "bold"),
+                wraplength=APP_WIDTH - 120,
+                justify="center",
             ).pack(fill="x", padx=60, pady=(0, 18))
 
     def admin_add_field_row(
@@ -1148,7 +1162,9 @@ class ScreensMixin:
                 text=reset_status_text,
                 bg=PANEL_BG,
                 fg="#c48b00",
-                font=("Arial", 12, "bold"),
+                font=("Arial", 14, "bold"),
+                wraplength=APP_WIDTH - 120,
+                justify="center",
             ).pack(fill="x", padx=60, pady=(0, 18))
 
     def refresh_admin_reset_field(self) -> None:
@@ -1251,7 +1267,7 @@ class ScreensMixin:
                 bd=0,
                 borderwidth=0,
                 highlightthickness=0,
-                font=("Arial", 13, "bold"),
+                font=("Arial", FOOTER_FONT_SIZE, "bold"),
                 padx=18,
                 pady=14,
             ).pack(side="left", expand=True, fill="x")
@@ -1299,7 +1315,7 @@ class ScreensMixin:
             text=f"Operador: {self.operator_id}",
             bg=WHITE,
             fg="#555555",
-            font=("Arial", 12),
+            font=("Arial", 14),
         ).pack(pady=(0, 12))
         for i, option in enumerate(self.menu_options):
             label = tk.Label(
@@ -1377,7 +1393,9 @@ class ScreensMixin:
                 text=self.status_text,
                 bg=WHITE,
                 fg=RED,
-                font=("Arial", 12, "bold"),
+                font=("Arial", 14, "bold"),
+                wraplength=APP_WIDTH - 120,
+                justify="center",
             ).grid(row=2, column=0, sticky="n", pady=12)
 
         selected_option = tk.Label(
@@ -1388,6 +1406,8 @@ class ScreensMixin:
             font=("Arial", 15),
             padx=4,
             pady=3,
+            wraplength=300,
+            justify="right",
         )
         selected_option.place(relx=1.0, x=-1, y=1, anchor="ne")
         selected_option.lift()
@@ -1402,6 +1422,7 @@ class ScreensMixin:
             ("Seguinte", GREEN, PANEL_FG, self.confirm),
             ("Confirmar", BLUE, PANEL_FG, self.confirm),
         ]
+        button_wrap_length = APP_WIDTH // len(buttons) - 16
         for text, bg, fg, command in buttons:
             tk.Button(
                 footer,
@@ -1416,7 +1437,9 @@ class ScreensMixin:
                 bd=0,
                 borderwidth=0,
                 highlightthickness=0,
-                font=("Arial", 12),
+                font=("Arial", FOOTER_FONT_SIZE),
+                wraplength=button_wrap_length,
+                justify="center",
                 pady=16,
             ).pack(side="left", expand=True, fill="both")
 
@@ -1536,7 +1559,7 @@ class ScreensMixin:
             bd=0,
             borderwidth=0,
             highlightthickness=0,
-            font=("Arial", 13),
+            font=("Arial", 14),
             width=14,
             pady=8,
         ).pack()
@@ -1547,7 +1570,9 @@ class ScreensMixin:
                 text=self.status_text,
                 bg=WHITE,
                 fg=RED,
-                font=("Arial", 12, "bold"),
+                font=("Arial", 14, "bold"),
+                wraplength=APP_WIDTH - 120,
+                justify="center",
             ).grid(row=2, column=0, sticky="n", pady=12)
 
         mold_badge = tk.Label(
@@ -1558,6 +1583,8 @@ class ScreensMixin:
             font=("Arial", 15),
             padx=14,
             pady=3,
+            wraplength=300,
+            justify="right",
         )
         mold_badge.place(relx=1.0, x=-1, y=1, anchor="ne")
         mold_badge.lift()
@@ -1572,6 +1599,7 @@ class ScreensMixin:
             ("Selecionar", GREEN, PANEL_FG, self.select),
             ("Confirmar", BLUE, PANEL_FG, self.confirm),
         ]
+        button_wrap_length = APP_WIDTH // len(buttons) - 16
         for text, bg, fg, command in buttons:
             tk.Button(
                 footer,
@@ -1586,7 +1614,9 @@ class ScreensMixin:
                 bd=0,
                 borderwidth=0,
                 highlightthickness=0,
-                font=("Arial", 12),
+                font=("Arial", FOOTER_FONT_SIZE),
+                wraplength=button_wrap_length,
+                justify="center",
                 pady=16,
             ).pack(side="left", expand=True, fill="both")
 
@@ -1594,7 +1624,7 @@ class ScreensMixin:
         self,
         parent: tk.Widget,
         buttons: list[tuple[str, str, str, object]],
-        font_size: int = 12,
+        font_size: int = FOOTER_FONT_SIZE,
     ) -> None:
         existing_children = parent.winfo_children()
         footer = tk.Frame(parent, bg=WHITE)
@@ -1602,6 +1632,7 @@ class ScreensMixin:
         if existing_children:
             pack_options["before"] = existing_children[0]
         footer.pack(**pack_options)
+        button_wrap_length = APP_WIDTH // len(buttons) - 16
         for text, bg, fg, command in buttons:
             tk.Button(
                 footer,
@@ -1617,6 +1648,8 @@ class ScreensMixin:
                 borderwidth=0,
                 highlightthickness=0,
                 font=("Arial", font_size),
+                wraplength=button_wrap_length,
+                justify="center",
                 pady=16,
             ).pack(side="left", expand=True, fill="both")
 
@@ -1651,6 +1684,8 @@ class ScreensMixin:
             font=("Arial", font_size),
             padx=padx,
             pady=3,
+            wraplength=300,
+            justify="right",
         )
         badge.place(relx=1.0, x=-1, y=1, anchor="ne")
         badge.lift()
@@ -1780,12 +1815,12 @@ class ScreensMixin:
             text="Use ↑/↓ para alterar a opção e confirme.",
             bg=WHITE,
             fg="#555555",
-            font=("Arial", 11),
+            font=("Arial", 14),
         ).pack(pady=(18, 0))
 
         badge_text = self.diameter_context_badge_text()
         if badge_text:
-            self.place_orange_badge(self, badge_text, font_size=13, padx=12)
+            self.place_orange_badge(self, badge_text, font_size=14, padx=12)
 
     def show_pressure(self) -> None:
         self.screen = "PRESSURE"
@@ -1818,7 +1853,7 @@ class ScreensMixin:
         field.pack_propagate(False)
         value_label = tk.Label(
             field,
-            text=self.input_value or " ",
+            text=self.input_value.replace(".", ",") or " ",
             bg=GREY,
             fg=PANEL_FG,
             font=("Arial", 22),
@@ -1835,14 +1870,28 @@ class ScreensMixin:
             font=("Arial", 22),
         ).pack(side="left")
 
+        feedback = tk.Frame(content, bg=WHITE)
+        feedback.grid(row=2, column=0, sticky="n", pady=12)
+        tk.Label(
+            feedback,
+            text=self.decimal_separator_help_text(),
+            bg=WHITE,
+            fg="#555555",
+            font=("Arial", 14, "bold"),
+            wraplength=APP_WIDTH - 120,
+            justify="center",
+        ).pack()
+
         if self.status_text:
             tk.Label(
-                content,
+                feedback,
                 text=self.status_text,
                 bg=WHITE,
                 fg=RED,
-                font=("Arial", 12, "bold"),
-            ).grid(row=2, column=0, sticky="n", pady=12)
+                font=("Arial", 14, "bold"),
+                wraplength=APP_WIDTH - 120,
+                justify="center",
+            ).pack(pady=(6, 0))
 
         self.build_simple_footer(
             root,
@@ -1856,7 +1905,7 @@ class ScreensMixin:
         self.place_orange_badge(
             root,
             self.setup_badge_text(include_circuit_count=True),
-            font_size=11,
+            font_size=14,
             padx=14,
         )
 
@@ -1913,7 +1962,9 @@ class ScreensMixin:
                 text=self.status_text,
                 bg=WHITE,
                 fg=RED,
-                font=("Arial", 12, "bold"),
+                font=("Arial", 14, "bold"),
+                wraplength=APP_WIDTH - 120,
+                justify="center",
             ).grid(row=2, column=0, sticky="n", pady=12)
 
         self.build_simple_footer(
@@ -1925,7 +1976,7 @@ class ScreensMixin:
                 ("Confirmar", BLUE, PANEL_FG, self.confirm),
             ],
         )
-        self.place_orange_badge(root, self.setup_badge_text(), font_size=12, padx=18)
+        self.place_orange_badge(root, self.setup_badge_text(), font_size=14, padx=18)
 
     def circuit_input_row(
         self,
@@ -1992,7 +2043,7 @@ class ScreensMixin:
             ),
             bg=PANEL_BG,
             fg="#555555",
-            font=("Arial", 12),
+            font=("Arial", 14),
         ).pack(pady=(0, 16))
         for i, option in enumerate(self.side_options):
             if option.startswith("Lado"):
@@ -2068,7 +2119,7 @@ class ScreensMixin:
                 text="Medição parada.",
                 bg=WHITE,
                 fg=RED,
-                font=("Arial", 13, "bold"),
+                font=("Arial", 14, "bold"),
             ).pack(fill="x", pady=(0, 4))
 
         if self.status_text:
@@ -2077,7 +2128,9 @@ class ScreensMixin:
                 text=self.status_text,
                 bg=WHITE,
                 fg=RED,
-                font=("Arial", 11, "bold"),
+                font=("Arial", 14, "bold"),
+                wraplength=APP_WIDTH - 40,
+                justify="center",
             ).pack(fill="x", pady=(0, 4))
 
         self.build_simple_footer(
@@ -2088,12 +2141,12 @@ class ScreensMixin:
                 ("Parar", GREEN, PANEL_FG, self.stop_current_measurement),
                 ("Concluir", BLUE, PANEL_FG, self.confirm),
             ],
-            font_size=10,
+            font_size=14,
         )
         self.place_orange_badge(
             root,
             self.measurement_badge_text(),
-            font_size=10,
+            font_size=14,
             padx=18,
         )
 
@@ -2108,8 +2161,8 @@ class ScreensMixin:
         width: int,
         value: str,
     ) -> tk.Label:
-        height = 42 if width >= 90 else 24
-        font_size = 20 if width >= 90 else 12
+        height = 42 if width >= 90 else 28
+        font_size = 20 if width >= 90 else 14
         box = tk.Frame(parent, bg=GREY, width=width, height=height)
         box.grid(row=row, column=column, sticky="w", padx=(0, 28), pady=(0, 30))
         box.pack_propagate(False)
@@ -2202,9 +2255,9 @@ class ScreensMixin:
                 ("Selecionar", GREEN, PANEL_FG, self.start_current_flow_measurement),
                 ("Seguinte", BLUE, PANEL_FG, self.start_current_flow_measurement),
             ],
-            font_size=10,
+            font_size=14,
         )
-        self.place_orange_badge(root, self.measurement_badge_text(), font_size=10, padx=18)
+        self.place_orange_badge(root, self.measurement_badge_text(), font_size=14, padx=18)
 
     def show_measurement_result(self) -> None:
         self.screen = "MEASUREMENT_RESULT"
@@ -2317,7 +2370,7 @@ class ScreensMixin:
             text="Limpar circuito",
             bg=WHITE,
             fg=RED,
-            font=("Arial", 13, "bold"),
+            font=("Arial", 20, "bold"),
         ).pack(fill="x", pady=(0, 4))
         self.build_simple_footer(
             footer_area,
@@ -2327,7 +2380,7 @@ class ScreensMixin:
                 ("Selecionar", GREEN, PANEL_FG, self.select),
                 (next_text, BLUE, PANEL_FG, self.advance_after_measurement_result),
             ],
-            font_size=10,
+            font_size=14,
         )
         self.place_orange_badge(root, self.measurement_badge_text(), font_size=14, padx=18)
 
@@ -2338,7 +2391,7 @@ class ScreensMixin:
         column: int,
         width: int,
         text: str,
-        font_size: int = 13,
+        font_size: int = 14,
         bg: str = GREY,
         highlight_bg: str | None = None,
         highlight_thickness: int = 0,
@@ -2412,7 +2465,7 @@ class ScreensMixin:
                 ),
                 ("Confirmar", BLUE, PANEL_FG, self.confirm),
             ],
-            font_size=14,
+            font_size=15,
         )
 
         content = tk.Frame(root, bg=WHITE)
@@ -2431,7 +2484,18 @@ class ScreensMixin:
             bg=WHITE,
             fg=PANEL_FG,
             font=("Arial", 28, "bold"),
-        ).pack(pady=(0, 26))
+        ).pack(pady=(0, 10 if self.result_editing else 26))
+
+        if self.result_editing:
+            tk.Label(
+                results_content,
+                text=self.decimal_separator_help_text(),
+                bg=WHITE,
+                fg="#555555",
+                font=("Arial", 14, "bold"),
+                wraplength=APP_WIDTH - 120,
+                justify="center",
+            ).pack(pady=(0, 10))
 
         records = sorted(self.measurements_for_side(side), key=lambda item: item["circuito"])
         if records:
@@ -2468,7 +2532,7 @@ class ScreensMixin:
                 text=f"Circuito {circuit}",
                 bg=WHITE,
                 fg=PANEL_FG,
-                font=("Arial", 24),
+                font=("Arial", RESULTS_TABLE_FONT_SIZE),
             ).grid(row=row_index, column=0, sticky="e", padx=(0, 14), pady=6)
             highlighted = bool(item.get("destacado"))
             selected = item_index == self.selected_result_index
@@ -2479,7 +2543,7 @@ class ScreensMixin:
                 1,
                 220,
                 value,
-                font_size=24,
+                font_size=RESULTS_TABLE_FONT_SIZE,
                 bg=bg,
                 highlight_bg="#087cff" if selected else bg,
                 highlight_thickness=2 if selected else 0,
@@ -2491,7 +2555,7 @@ class ScreensMixin:
                 text="litros/min",
                 bg=WHITE,
                 fg=PANEL_FG,
-                font=("Arial", 24),
+                font=("Arial", RESULTS_TABLE_FONT_SIZE),
             ).grid(row=row_index, column=2, sticky="w", padx=(14, 0), pady=6)
 
         visible_count = max(end - start, 1)
@@ -2517,7 +2581,9 @@ class ScreensMixin:
                 text=self.status_text,
                 bg=WHITE,
                 fg=RED,
-                font=("Arial", 13, "bold"),
+                font=("Arial", 14, "bold"),
+                wraplength=APP_WIDTH - 120,
+                justify="center",
             ).grid(row=2, column=0, pady=(12, 0))
 
     def show_side_complete(self) -> None:
@@ -2591,7 +2657,7 @@ class ScreensMixin:
                 ("Guardar\nDados", GREEN, PANEL_FG, self.save_session_and_return_to_login),
                 ("Confirmar", BLUE, PANEL_FG, self.save_session_and_return_to_login),
             ],
-            font_size=15,
+            font_size=16,
         )
 
     def save_session_and_return_to_login(self) -> None:
@@ -2661,24 +2727,34 @@ class ScreensMixin:
             text=f"Total de circuitos medidos: {total}",
             bg=PANEL_BG,
             fg="#555555",
-            font=("Arial", 12),
+            font=("Arial", 14),
         ).pack(pady=(0, 10))
 
         if self.session and self.session.medicoes:
             table = tk.Frame(panel, bg=PANEL_BG)
-            table.pack(fill="x", padx=35, pady=(0, 8))
-            headers = ["Lado", "Circ.", "Min", "Médio", "Máx"]
-            for col, header in enumerate(headers):
+            table.pack(fill="x", padx=20, pady=(0, 8))
+            headers = [
+                ("Lado", 16),
+                ("Circ.", 9),
+                ("Min", 11),
+                ("Médio", 11),
+                ("Máx", 11),
+            ]
+            for col, (header, width) in enumerate(headers):
+                table.grid_columnconfigure(col, weight=1)
                 tk.Label(
                     table,
                     text=header,
                     bg="#374151",
                     fg=WHITE,
-                    font=("Arial", 10, "bold"),
-                    width=10,
+                    font=("Arial", TABLE_FONT_SIZE, "bold"),
+                    width=width,
                     pady=4,
-                ).grid(row=0, column=col, padx=1)
-            for row, item in enumerate(self.session.medicoes[-5:], start=1):
+                ).grid(row=0, column=col, padx=1, sticky="ew")
+            height = self.winfo_height()
+            summary_row_count = 3 if height <= 1 or height < 700 else 5
+            visible_measurements = self.session.medicoes[-summary_row_count:]
+            for row, item in enumerate(visible_measurements, start=1):
                 values = [
                     item["lado"],
                     item["circuito"],
@@ -2692,10 +2768,10 @@ class ScreensMixin:
                         text=str(value),
                         bg=WHITE,
                         fg=PANEL_FG,
-                        font=("Arial", 10),
-                        width=10,
+                        font=("Arial", TABLE_FONT_SIZE),
+                        width=headers[col][1],
                         pady=4,
-                    ).grid(row=row, column=col, padx=1, pady=1)
+                    ).grid(row=row, column=col, padx=1, pady=1, sticky="ew")
 
         options = ["Nova operação", "Confirmar dados", "Terminar sessão"]
         for i, option in enumerate(options):
@@ -2784,7 +2860,9 @@ class ScreensMixin:
                 text=self.status_text,
                 bg=WHITE,
                 fg=RED if is_error else GREEN,
-                font=("Arial", 10, "bold"),
+                font=("Arial", 14, "bold"),
+                wraplength=APP_WIDTH - 120,
+                justify="center",
             ).pack(pady=(0, 6))
 
         if groups:
@@ -2807,7 +2885,7 @@ class ScreensMixin:
             self.send_review_first_row = first_visible_row
             visible_rows = display_rows[first_visible_row : first_visible_row + max_rows]
             table_area = tk.Frame(panel, bg=WHITE)
-            table_area.pack(fill="x", padx=24, pady=(0, 0))
+            table_area.pack(fill="x", padx=4, pady=(0, 0))
             table = tk.Frame(table_area, bg=WHITE)
             table.pack(side="left", fill="x", expand=True)
             self.send_review_checkbox_vars = []
@@ -2850,7 +2928,7 @@ class ScreensMixin:
                     text="",
                     bg="#374151",
                     fg=WHITE,
-                    font=("Arial", 10, "bold"),
+                    font=("Arial", TABLE_FONT_SIZE, "bold"),
                     width=checkbox_column_width,
                     pady=4,
                 )
@@ -2865,7 +2943,7 @@ class ScreensMixin:
                     text=header,
                     bg="#374151",
                     fg=WHITE,
-                    font=("Arial", 10, "bold"),
+                    font=("Arial", TABLE_FONT_SIZE, "bold"),
                     width=width,
                     pady=4,
                 )
@@ -2952,7 +3030,7 @@ class ScreensMixin:
                         text=value,
                         bg=bg,
                         fg=fg,
-                        font=("Arial", 10, font_weight),
+                        font=("Arial", TABLE_FONT_SIZE, font_weight),
                         width=headers[col - first_data_column][1],
                         pady=4,
                     )
@@ -2990,7 +3068,7 @@ class ScreensMixin:
                 text=message,
                 bg=WHITE,
                 fg="#555555",
-                font=("Arial", 13),
+                font=("Arial", 14),
             ).pack(pady=22)
 
     def pending_review_session_count(self, rows: list[dict[str, Any]]) -> int:
@@ -3364,10 +3442,10 @@ class ScreensMixin:
     def send_review_visible_row_count(self) -> int:
         height = max(self.winfo_height(), self.winfo_screenheight(), 480)
         if height >= 900:
-            return 16
+            return 14
         if height >= 700:
-            return 11
-        return 8
+            return 10
+        return 7
 
     def bind_send_review_scroll(self, widget: tk.Widget) -> None:
         widget.bind("<MouseWheel>", self.on_send_review_mousewheel, add="+")

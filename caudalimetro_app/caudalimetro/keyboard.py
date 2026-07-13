@@ -23,6 +23,10 @@ class KeyboardMixin:
             self.go_back()
             return
 
+        if char in ("*", "#") and self.accepts_decimal_separator():
+            self.add_char(".")
+            return
+
         if key in ("Return", "KP_Enter") or char == "#":
             self.confirm()
             return
@@ -103,7 +107,9 @@ class KeyboardMixin:
         return " ".join(text.replace("_", " ").replace("-", " ").lower().split())
 
     def on_keypad_key(self, key: str) -> None:
-        if key == "#":
+        if key in ("*", "#") and self.accepts_decimal_separator():
+            self.add_char(".")
+        elif key == "#":
             self.confirm()
         elif key == "*":
             self.delete_all()
@@ -115,6 +121,15 @@ class KeyboardMixin:
             return
 
         self.restore_keyboard_focus()
+
+    def accepts_decimal_separator(self) -> bool:
+        return self.screen == "PRESSURE" or (
+            self.screen == "CIRCUIT_RESULTS" and self.result_editing
+        )
+
+    @staticmethod
+    def decimal_separator_help_text() -> str:
+        return "Use * ou # no numpad para inserir uma vírgula."
 
     def move(self, delta: int) -> None:
         if self.screen == "LOGIN":
@@ -232,7 +247,10 @@ class KeyboardMixin:
         self.selected_index = (self.selected_index + delta) % len(self.diameter_options)
 
     def update_input_value_field(self) -> bool:
-        return self.update_field_value("input_value", self.input_value)
+        display_value = self.input_value
+        if self.accepts_decimal_separator():
+            display_value = display_value.replace(".", ",")
+        return self.update_field_value("input_value", display_value)
 
     def active_circuit_input_key(self) -> str:
         if (

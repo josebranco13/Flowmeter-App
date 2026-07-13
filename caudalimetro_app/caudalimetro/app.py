@@ -4,6 +4,7 @@ from collections.abc import Callable
 from importlib import import_module
 from queue import Empty, Queue
 import tkinter as tk
+import tkinter.font as tkfont
 
 from .config import (
     APP_BG,
@@ -13,6 +14,7 @@ from .config import (
     DIAMETER_OPTIONS,
     MAIL_DRAFTS_DIR,
     MENU_OPTIONS,
+    MIN_UI_FONT_SIZE,
     PDF_EXPORTS_DIR,
     SENT_DIR,
     SESSIONS_DIR,
@@ -40,6 +42,7 @@ class CaudalimetroApp(
         self.geometry(f"{APP_WIDTH}x{APP_HEIGHT}")
         self.minsize(APP_WIDTH, APP_HEIGHT)
         self.configure(bg=APP_BG)
+        self.configure_default_fonts()
         self.option_add("*Button.takeFocus", 0)
         self.maximize_window()
 
@@ -130,6 +133,25 @@ class CaudalimetroApp(
         self.initialize_hardware_inputs()
         #self.show_login()
         self.after_idle(self.restore_keyboard_focus)
+
+    def configure_default_fonts(self) -> None:
+        """Garante uma fonte legível também nos widgets sem estilo explícito."""
+        for font_name in (
+            "TkDefaultFont",
+            "TkTextFont",
+            "TkMenuFont",
+            "TkHeadingFont",
+            "TkCaptionFont",
+            "TkSmallCaptionFont",
+            "TkIconFont",
+            "TkTooltipFont",
+        ):
+            try:
+                named_font = tkfont.nametofont(font_name)
+                if abs(int(named_font.actual("size"))) < MIN_UI_FONT_SIZE:
+                    named_font.configure(size=MIN_UI_FONT_SIZE)
+            except tk.TclError:
+                continue
 
     def maximize_window(self) -> None:
         try:
