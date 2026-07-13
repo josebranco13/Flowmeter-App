@@ -62,6 +62,7 @@ class CaudalimetroApp(
         self.selected_index = 0
         self.selected_exported_record_index = 0
         self.exported_records_first_row = 0
+        self.email_send_in_progress = False
         self.send_review_first_row = 0
         self.send_review_expanded_group_key: tuple[str, str, str, str] | None = None
         self.send_review_selected_measurement_ref: tuple[str, int] | None = None

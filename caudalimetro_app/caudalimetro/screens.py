@@ -743,6 +743,7 @@ class ScreensMixin:
 
     def _finish_email_send(self, success: bool, message: str) -> None:
         def update_status() -> None:
+            self.email_send_in_progress = False
             self.status_text = message if success else f"Erro ao enviar email: {message}"
             if self.screen == "EXPORTED_RECORDS":
                 self.show_exported_records()
@@ -750,6 +751,11 @@ class ScreensMixin:
         self.after(0, update_status)
 
     def email_selected_exported_record(self) -> None:
+        if self.email_send_in_progress:
+            self.status_text = "Já existe um envio de email em curso."
+            self.show_exported_records()
+            return
+
         record = self.selected_exported_record()
         if record is None:
             self.status_text = "Nao existem ficheiros para enviar."
@@ -778,6 +784,7 @@ class ScreensMixin:
             self.show_exported_records()
             return
 
+        self.email_send_in_progress = True
         self.status_text = "A enviar email..."
         self.show_exported_records()
         send_selected_export_email_async(
@@ -789,6 +796,11 @@ class ScreensMixin:
         )
 
     def email_all_exported_records(self) -> None:
+        if self.email_send_in_progress:
+            self.status_text = "Já existe um envio de email em curso."
+            self.show_exported_records()
+            return
+
         records = self.load_exported_pdf_records()
         if not records:
             self.status_text = "Nao existem ficheiros para enviar."
@@ -816,6 +828,7 @@ class ScreensMixin:
             self.show_exported_records()
             return
 
+        self.email_send_in_progress = True
         self.status_text = "A enviar todos os ficheiros exportados..."
         self.show_exported_records()
         send_all_exports_email_async(

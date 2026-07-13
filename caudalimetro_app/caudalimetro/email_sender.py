@@ -2,14 +2,15 @@ from __future__ import annotations
 
 import json
 import mimetypes
-import smtplib
-import ssl
+import re
 import threading
 from email.message import EmailMessage
 from pathlib import Path
 from typing import Any, Callable, Iterable
+from uuid import uuid4
 
 from .config import DATA_DIR, PDF_EXPORTS_DIR
+from .gmail_sender import send_gmail_message
 
 
 EMAIL_CONFIG_PATH = DATA_DIR / "email_config.json"
@@ -66,25 +67,26 @@ def _export_directory(config: dict[str, Any] | None = None) -> Path:
     return DATA_DIR.parent / path
 
 
-def export_manifest_was_emailed(json_path: Path) -> bool:
+def _load_export_manifest(json_path: Path) -> dict[str, Any] | None:
     try:
         with Path(json_path).open("r", encoding="utf-8") as file:
             data = json.load(file)
     except (OSError, json.JSONDecodeError):
-        return False
+        return None
 
-    return isinstance(data, dict) and bool(data.get(EMAIL_SENT_FIELD))
+    return data if isinstance(data, dict) else None
+
+
+def export_manifest_was_emailed(json_path: Path) -> bool:
+    data = _load_export_manifest(json_path)
+
+    return bool(data and data.get(EMAIL_SENT_FIELD))
 
 
 def mark_export_manifest_emailed(json_path: Path) -> bool:
     path = Path(json_path)
-    try:
-        with path.open("r", encoding="utf-8") as file:
-            data = json.load(file)
-    except (OSError, json.JSONDecodeError):
-        return False
-
-    if not isinstance(data, dict):
+    data = _load_export_manifest(path)
+    if data is None:
         return False
 
     from datetime import datetime
@@ -92,11 +94,18 @@ def mark_export_manifest_emailed(json_path: Path) -> bool:
     data[EMAIL_SENT_FIELD] = datetime.now().isoformat(timespec="seconds")
     data["email_estado"] = "enviado"
 
+    temporary_path = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
     try:
-        with path.open("w", encoding="utf-8") as file:
+        with temporary_path.open("w", encoding="utf-8") as file:
             json.dump(data, file, ensure_ascii=False, indent=2)
+        temporary_path.replace(path)
     except OSError:
         return False
+    finally:
+        try:
+            temporary_path.unlink(missing_ok=True)
+        except OSError:
+            pass
 
     return True
 
@@ -109,13 +118,12 @@ def exported_pdf_json_pairs(
     if not export_dir.exists():
         return pairs
 
-    for pdf_path in sorted(export_dir.glob("*.pdf")):
+    for pdf_path in sorted(export_dir.glob("Registo_Caudais_*.pdf")):
         json_path = pdf_path.with_suffix(".json")
-
-        if json_path.exists() and json_path.is_file():
-            if export_manifest_was_emailed(json_path):
-                continue
-            pairs.append((pdf_path, json_path))
+        _mold_id, error = _export_pair_mold_id(pdf_path, json_path)
+        if error or export_manifest_was_emailed(json_path):
+            continue
+        pairs.append((pdf_path, json_path))
 
     return pairs
 
@@ -124,68 +132,82 @@ def has_exported_pdf_json_pairs(config: dict[str, Any] | None = None) -> bool:
     return bool(exported_pdf_json_pairs(_export_directory(config)))
 
 
-def _smtp_send_message(config: dict[str, Any], message: EmailMessage) -> None:
+def _gmail_send_message(config: dict[str, Any], message: EmailMessage) -> None:
     if not config.get("enabled", False):
         raise RuntimeError("O envio de email está desativado.")
 
-    smtp_config = config["smtp"]
-    account = config["account"]
     recipients = config["recipients"]
-
-    password = str(account.get("password") or "").strip()
-
-    if not password:
-        raise RuntimeError("Password de email em falta no email_config.json.")
 
     to_recipients = _as_list(recipients.get("to"))
     cc_recipients = _as_list(recipients.get("cc"))
     bcc_recipients = _as_list(recipients.get("bcc"))
-
     all_recipients = to_recipients + cc_recipients + bcc_recipients
 
     if not all_recipients:
         raise RuntimeError("Não existem destinatários configurados.")
 
-    sender_email = str(account["sender_email"])
-    username = str(account.get("username") or sender_email)
+    send_gmail_message(message)
 
-    timeout = int(smtp_config.get("timeout_seconds", 20))
-    security = str(smtp_config.get("security", "starttls")).lower()
 
-    ssl_context = ssl.create_default_context()
+def _export_pair_mold_id(pdf_path: Path, json_path: Path) -> tuple[str, str]:
+    pdf_path = Path(pdf_path)
+    json_path = Path(json_path)
 
-    if security == "ssl":
-        with smtplib.SMTP_SSL(
-            str(smtp_config["host"]),
-            int(smtp_config["port"]),
-            timeout=timeout,
-            context=ssl_context,
-        ) as server:
-            server.login(username, password)
-            server.send_message(
-                message,
-                from_addr=sender_email,
-                to_addrs=all_recipients,
-            )
-        return
+    for path in (pdf_path, json_path):
+        if not path.exists() or not path.is_file():
+            return "", f"Ficheiro em falta: {path.name}"
 
-    with smtplib.SMTP(
-        str(smtp_config["host"]),
-        int(smtp_config["port"]),
-        timeout=timeout,
-    ) as server:
-        server.ehlo()
+    manifest = _load_export_manifest(json_path)
+    if manifest is None:
+        return "", f"Manifesto JSON inválido: {json_path.name}"
 
-        if security == "starttls":
-            server.starttls(context=ssl_context)
-            server.ehlo()
+    mold_id = str(manifest.get("molde") or "").strip()
+    if not mold_id or mold_id == "-":
+        return "", f"ID do molde em falta no ficheiro: {json_path.name}"
 
-        server.login(username, password)
-        server.send_message(
-            message,
-            from_addr=sender_email,
-            to_addrs=all_recipients,
+    manifest_pdf_name = Path(str(manifest.get("ficheiro") or "")).name
+    if manifest_pdf_name != pdf_path.name:
+        return "", (
+            f"O ficheiro {json_path.name} não corresponde ao PDF {pdf_path.name}."
         )
+
+    return mold_id, ""
+
+
+def _unique_mold_ids(mold_ids: Iterable[str]) -> list[str]:
+    unique_ids: list[str] = []
+    seen: set[str] = set()
+
+    for mold_id in mold_ids:
+        normalized_id = str(mold_id or "").strip()
+        key = normalized_id.casefold()
+        if not normalized_id or normalized_id == "-" or key in seen:
+            continue
+        seen.add(key)
+        unique_ids.append(normalized_id)
+
+    return sorted(unique_ids, key=str.casefold)
+
+
+def _mold_subject_identifier(mold_ids: Iterable[str]) -> str:
+    unique_ids = _unique_mold_ids(mold_ids)
+    prefix = "Molde" if len(unique_ids) == 1 else "Moldes"
+    return f"{prefix} {', '.join(unique_ids)}"
+
+
+def _ensure_subject_identifies_molds(subject: str, mold_ids: Iterable[str]) -> str:
+    unique_ids = _unique_mold_ids(mold_ids)
+    if all(
+        re.search(
+            rf"(?<!\w){re.escape(mold_id)}(?!\w)",
+            subject,
+            flags=re.IGNORECASE,
+        )
+        for mold_id in unique_ids
+    ):
+        return subject
+
+    return f"{subject.rstrip()} - {_mold_subject_identifier(unique_ids)}"
 
 
 def send_email_with_attachments(
@@ -221,10 +243,15 @@ def send_email_with_attachments(
         else:
             message["From"] = sender_email
 
-        message["To"] = ", ".join(to_recipients)
+        if to_recipients:
+            message["To"] = ", ".join(to_recipients)
 
         if cc_recipients:
             message["Cc"] = ", ".join(cc_recipients)
+
+        bcc_recipients = _as_list(recipients.get("bcc"))
+        if bcc_recipients:
+            message["Bcc"] = ", ".join(bcc_recipients)
 
         message["Subject"] = subject
         message.set_content(body)
@@ -244,7 +271,7 @@ def send_email_with_attachments(
                 filename=path.name,
             )
 
-        _smtp_send_message(config, message)
+        _gmail_send_message(config, message)
 
     except Exception as exc:
         return False, f"Não foi possível enviar o email: {exc}"
@@ -271,7 +298,10 @@ def send_selected_export_email(
         return False, f"Ficheiro em falta: {json_path.name}"
 
     message_config = config.get("messages", {}).get("single", {})
-    selected_mold = str(mold if mold is not None else molde or "").strip() or "-"
+    selected_mold, pair_error = _export_pair_mold_id(pdf_path, json_path)
+    if pair_error:
+        return False, pair_error
+
     selected_file_name = str(file_name or pdf_path.name)
 
     context = {
@@ -287,6 +317,7 @@ def send_selected_export_email(
         str(message_config.get("subject") or "Registo de caudais - Molde {molde}"),
         context,
     )
+    subject = _ensure_subject_identifies_molds(subject, [selected_mold])
 
     body = _format_template(
         str(
@@ -302,8 +333,11 @@ def send_selected_export_email(
         body=body,
         attachment_paths=[pdf_path, json_path],
     )
-    if success:
-        mark_export_manifest_emailed(json_path)
+    if success and not mark_export_manifest_emailed(json_path):
+        message = (
+            f"{message} Aviso: o email foi enviado, mas não foi possível "
+            f"atualizar {json_path.name}."
+        )
     return success, message
 
 
@@ -311,31 +345,52 @@ def send_all_exports_email(
     config: dict[str, Any],
     pairs: Iterable[tuple[Path, Path]] | None = None,
 ) -> tuple[bool, str]:
-    pairs = list(pairs) if pairs is not None else exported_pdf_json_pairs(
-        _export_directory(config)
+    pairs = (
+        [(Path(pdf_path), Path(json_path)) for pdf_path, json_path in pairs]
+        if pairs is not None
+        else exported_pdf_json_pairs(_export_directory(config))
     )
 
     if not pairs:
         return False, "Não existem pares PDF + JSON para enviar."
 
     attachments: list[Path] = []
+    mold_ids: list[str] = []
 
     for pdf_path, json_path in pairs:
+        mold_id, pair_error = _export_pair_mold_id(pdf_path, json_path)
+        if pair_error:
+            return False, pair_error
         attachments.append(pdf_path)
         attachments.append(json_path)
+        mold_ids.append(mold_id)
+
+    mold_ids = _unique_mold_ids(mold_ids)
+    mold_ids_text = ", ".join(mold_ids)
+    mold_identifier = _mold_subject_identifier(mold_ids)
 
     message_config = config.get("messages", {}).get("all", {})
 
     context = {
+        "molde": mold_ids_text,
+        "mold": mold_ids_text,
+        "moldes": mold_ids_text,
+        "molds": mold_ids_text,
+        "ids_moldes": mold_ids_text,
+        "identificacao_moldes": mold_identifier,
         "total_pares": len(pairs),
         "total_pdfs": len(pairs),
         "total_ficheiros": len(attachments),
     }
 
     subject = _format_template(
-        str(message_config.get("subject") or "Registos de caudais exportados"),
+        str(
+            message_config.get("subject")
+            or "Registo de caudais - {identificacao_moldes}"
+        ),
         context,
     )
+    subject = _ensure_subject_identifies_molds(subject, mold_ids)
 
     body = _format_template(
         str(
@@ -352,8 +407,16 @@ def send_all_exports_email(
         attachment_paths=attachments,
     )
     if success:
+        unmarked_manifests: list[str] = []
         for _pdf_path, json_path in pairs:
-            mark_export_manifest_emailed(json_path)
+            if not mark_export_manifest_emailed(json_path):
+                unmarked_manifests.append(json_path.name)
+        if unmarked_manifests:
+            message = (
+                f"{message} Aviso: o email foi enviado, mas não foi possível "
+                "atualizar: "
+                f"{', '.join(unmarked_manifests)}."
+            )
     return success, message
 
 

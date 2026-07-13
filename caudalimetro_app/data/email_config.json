@@ -1,18 +1,9 @@
 {
   "enabled": true,
 
-  "smtp": {
-    "host": "sandbox.smtp.mailtrap.io",
-    "port": 2525,
-    "security": "starttls",
-    "timeout_seconds": 20
-  },
-
   "account": {
     "sender_name": "Sistema de Medição de Caudais",
-    "sender_email": "caudalimetro.teste@gmail.com",
-    "username": "e15116a7f11ce9",
-    "password": "5a4cfcb3be2b49"
+    "sender_email": "caudalimetro.teste@gmail.com"
   },
 
   "recipients": {
@@ -34,8 +25,8 @@
       "body": "Bom dia,\n\nSegue em anexo o relatório PDF e o respetivo ficheiro JSON do molde {molde}.\n\nFicheiro: {ficheiro}\n\nCumprimentos,\nSistema de Medição de Caudais"
     },
     "all": {
-      "subject": "Registos de caudais exportados",
-      "body": "Bom dia,\n\nSeguem em anexo todos os relatórios PDF exportados e os respetivos ficheiros JSON.\n\nTotal de PDFs: {total_pdfs}\nTotal de ficheiros anexados: {total_ficheiros}\n\nCumprimentos,\nSistema de Medição de Caudais"
+      "subject": "Registo de caudais - {identificacao_moldes}",
+      "body": "Bom dia,\n\nSeguem em anexo todos os relatórios PDF exportados e os respetivos ficheiros JSON dos moldes: {moldes}.\n\nTotal de PDFs: {total_pdfs}\nTotal de ficheiros anexados: {total_ficheiros}\n\nCumprimentos,\nSistema de Medição de Caudais"
     }
   },
 
