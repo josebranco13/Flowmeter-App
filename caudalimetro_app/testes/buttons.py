@@ -13,6 +13,7 @@ else:
 
 
 BUTTON_CONFIG = {
+    "Voltar": 12,
     "Cima": 20,
     "Baixo": 16,
     "Vermelho": 5,
@@ -45,15 +46,19 @@ class PhysicalButtonPanel:
 
         for name, pin in button_config.items():
             btn = Button(pin, bounce_time=bounce_time)
-            btn.when_pressed = lambda button_name=name: self._dispatch(
-                self._on_pressed,
-                button_name,
-            )
-            btn.when_released = lambda button_name=name: self._dispatch(
-                self._on_released,
-                button_name,
-            )
+            btn.when_pressed = self._make_dispatcher(self._on_pressed, name)
+            btn.when_released = self._make_dispatcher(self._on_released, name)
             self.buttons[name] = btn
+
+    def _make_dispatcher(
+        self,
+        callbacks: ButtonCallbacks | None,
+        button_name: str,
+    ) -> Callable[..., None]:
+        def dispatch_button_name(*_args: object) -> None:
+            self._dispatch(callbacks, button_name)
+
+        return dispatch_button_name
 
     @staticmethod
     def _dispatch(callbacks: ButtonCallbacks | None, button_name: str) -> None:
